@@ -1,7 +1,9 @@
 import { mkdirSync, existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-const dirs = ['src/platform', 'src/features/game'];
+const dirs = [
+  'src/features/truco',
+];
 
 for (const dir of dirs) {
   const fullPath = join(process.cwd(), dir);
@@ -11,95 +13,6 @@ for (const dir of dirs) {
 }
 
 const files = {
-  'src/platform/audio.ts': `class SoundEngine {
-  private ctx: AudioContext | null = null;
-
-  private getContext(): AudioContext | null {
-    if (typeof window === 'undefined') return null;
-    if (!this.ctx) {
-      const AudioContextClass =
-        window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      if (AudioContextClass) {
-        this.ctx = new AudioContextClass();
-      }
-    }
-    if (this.ctx && this.ctx.state === 'suspended') {
-      this.ctx.resume();
-    }
-    return this.ctx;
-  }
-
-  playPlace(): void {
-    const ctx = this.getContext();
-    if (!ctx) return;
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = 'triangle';
-    osc.frequency.setValueAtTime(320, ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(160, ctx.currentTime + 0.08);
-
-    gain.gain.setValueAtTime(0.15, ctx.currentTime);
-    gain.gain.linearRampToValueAtTime(0.01, ctx.currentTime + 0.08);
-
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start();
-    osc.stop(ctx.currentTime + 0.08);
-  }
-
-  playClear(linesCount: number): void {
-    const ctx = this.getContext();
-    if (!ctx) return;
-    const baseFreq = 440 + linesCount * 110;
-
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(baseFreq, ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(baseFreq * 1.5, ctx.currentTime + 0.2);
-
-    gain.gain.setValueAtTime(0.2, ctx.currentTime);
-    gain.gain.linearRampToValueAtTime(0.01, ctx.currentTime + 0.2);
-
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start();
-    osc.stop(ctx.currentTime + 0.2);
-  }
-
-  playGameOver(): void {
-    const ctx = this.getContext();
-    if (!ctx) return;
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = 'sawtooth';
-    osc.frequency.setValueAtTime(220, ctx.currentTime);
-    osc.frequency.linearRampToValueAtTime(110, ctx.currentTime + 0.4);
-
-    gain.gain.setValueAtTime(0.2, ctx.currentTime);
-    gain.gain.linearRampToValueAtTime(0.01, ctx.currentTime + 0.4);
-
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start();
-    osc.stop(ctx.currentTime + 0.4);
-  }
-}
-
-export const soundEngine = new SoundEngine();
-`,
-
-  'src/platform/haptics.ts': `export function triggerHaptic(pattern: number | number[] = 15): void {
-  if (typeof window !== 'undefined' && 'navigator' in window && 'vibrate' in navigator) {
-    try {
-      navigator.vibrate(pattern);
-    } catch {
-      // Ignore if vibration is restricted by browser policy
-    }
-  }
-}
-`,
-
   'src/i18n/es-AR.ts': `import { APP_NAME } from '@/app/config';
 
 export const esAR = {
@@ -159,9 +72,21 @@ export const esAR = {
     restart: 'Reiniciar partida',
     quit: 'Salir al inicio',
   },
+  truco: {
+    us: 'Nosotros',
+    them: 'Ellos',
+    malas: 'MALAS',
+    buenas: 'BUENAS',
+    meta15: 'A 15 puntos',
+    meta30: 'A 30 puntos',
+    undo: 'Deshacer',
+    reset: 'Nueva partida',
+    matchWon: '¡Partida ganada!',
+    revancha: 'Jugar revancha',
+    historyTitle: 'Historial de Partidas',
+    winsCount: 'victorias',
+  },
   placeholders: {
-    trucoTitle: 'Anotador de Truco (Fase 5)',
-    trucoDesc: 'Acá irá la mesa con paño verde y fósforos.',
     settingsTitle: 'Ajustes (Fase 6)',
     settingsDesc: 'Configuración de sonido, vibración, tema y datos.',
   },
@@ -170,292 +95,307 @@ export const esAR = {
 export type Dictionary = typeof esAR;
 `,
 
-  'src/features/game/gameStore.ts': `import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
-import {
-  createEmptyGrid,
-  generateSmartTray,
-  canPlacePiece,
-  placePieceAndClear,
-  isGameOver,
-} from './engine';
-import type { Grid, PieceInstance } from './types';
-import { useSettingsStore } from '@/features/settings/settingsStore';
-import { soundEngine } from '@/platform/audio';
-import { triggerHaptic } from '@/platform/haptics';
-import { webStorage } from '@/platform';
+  'src/features/truco/trucoEngine.ts': `export type TargetScore = 15 | 30;
 
-interface GameState {
-  grid: Grid;
-  tray: [PieceInstance | null, PieceInstance | null, PieceInstance | null];
-  score: number;
-  combo: number;
-  isOver: boolean;
-  isPaused: boolean;
-  startNewGame: () => void;
-  pauseGame: (paused: boolean) => void;
-  placeTrayPiece: (trayIndex: number, row: number, col: number) => boolean;
+export interface TrucoMatchState {
+  target: TargetScore;
+  usScore: number;
+  themScore: number;
+  winner: 'us' | 'them' | null;
+  history: { us: number; them: number }[];
 }
 
-export const useGameStore = create<GameState>()(
-  persist(
-    (set, get) => {
-      const initialGrid = createEmptyGrid();
-      return {
-        grid: initialGrid,
-        tray: generateSmartTray(initialGrid),
-        score: 0,
-        combo: 0,
-        isOver: false,
-        isPaused: false,
+export function createTrucoMatch(target: TargetScore = 30): TrucoMatchState {
+  return {
+    target,
+    usScore: 0,
+    themScore: 0,
+    winner: null,
+    history: [],
+  };
+}
 
-        startNewGame: () => {
-          const freshGrid = createEmptyGrid();
-          set({
-            grid: freshGrid,
-            tray: generateSmartTray(freshGrid),
-            score: 0,
-            combo: 0,
-            isOver: false,
-            isPaused: false,
-          });
-          useSettingsStore.setState({ hasSavedGame: true });
-        },
+export function addPoints(
+  state: TrucoMatchState,
+  team: 'us' | 'them',
+  points: number
+): TrucoMatchState {
+  if (state.winner !== null) return state;
 
-        pauseGame: (paused) => set({ isPaused: paused }),
+  const currentUs = state.usScore;
+  const currentThem = state.themScore;
 
-        placeTrayPiece: (trayIndex, row, col) => {
-          const { grid, tray, score, combo, isOver, isPaused } = get();
-          if (isOver || isPaused) return false;
+  const nextUs = team === 'us' ? Math.min(state.target, currentUs + points) : currentUs;
+  const nextThem = team === 'them' ? Math.min(state.target, currentThem + points) : currentThem;
 
-          const piece = tray[trayIndex];
-          if (!piece) return false;
+  let winner: 'us' | 'them' | null = null;
+  if (nextUs >= state.target) winner = 'us';
+  else if (nextThem >= state.target) winner = 'them';
 
-          if (!canPlacePiece(grid, piece.matrix, row, col)) {
-            return false;
-          }
+  return {
+    ...state,
+    usScore: nextUs,
+    themScore: nextThem,
+    winner,
+    history: [...state.history, { us: currentUs, them: currentThem }],
+  };
+}
 
-          const result = placePieceAndClear(grid, piece, row, col, combo);
-          const nextScore = score + result.pointsEarned;
+export function undoTrucoMatch(state: TrucoMatchState): TrucoMatchState {
+  if (state.history.length === 0) return state;
+  const lastState = state.history[state.history.length - 1];
+  const newHistory = state.history.slice(0, -1);
 
-          const settings = useSettingsStore.getState();
-          if (settings.soundEnabled) {
-            if (result.linesCleared > 0) {
-              soundEngine.playClear(result.linesCleared);
-            } else {
-              soundEngine.playPlace();
-            }
-          }
-          if (settings.hapticsEnabled) {
-            triggerHaptic(result.linesCleared > 0 ? [30, 50, 30] : 15);
-          }
-
-          const nextTray: [PieceInstance | null, PieceInstance | null, PieceInstance | null] = [
-            tray[0],
-            tray[1],
-            tray[2],
-          ];
-          nextTray[trayIndex] = null;
-
-          const allUsed = nextTray.every((p) => p === null);
-          const finalTray = allUsed ? generateSmartTray(result.grid) : nextTray;
-          const gameEnded = isGameOver(result.grid, finalTray);
-
-          if (gameEnded) {
-            if (settings.soundEnabled) soundEngine.playGameOver();
-            if (settings.hapticsEnabled) triggerHaptic([50, 100, 50, 100]);
-          }
-
-          if (nextScore > settings.highScore) {
-            useSettingsStore.setState({ highScore: nextScore });
-          }
-          if (gameEnded) {
-            useSettingsStore.setState({
-              gamesPlayed: settings.gamesPlayed + 1,
-              hasSavedGame: false,
-            });
-          } else {
-            useSettingsStore.setState({ hasSavedGame: true });
-          }
-
-          set({
-            grid: result.grid,
-            tray: finalTray,
-            score: nextScore,
-            combo: result.newCombo,
-            isOver: gameEnded,
-          });
-
-          return true;
-        },
-      };
-    },
-    {
-      name: 'trucoblock-game',
-      storage: createJSONStorage(() => webStorage),
-    }
-  )
-);
+  return {
+    ...state,
+    usScore: lastState.us,
+    themScore: lastState.them,
+    winner: null,
+    history: newHistory,
+  };
+}
 `,
 
-  'src/features/game/GameScreen.module.css': `.screen {
+  'src/features/truco/trucoEngine.test.ts': `import { describe, it, expect } from 'vitest';
+import { createTrucoMatch, addPoints, undoTrucoMatch } from './trucoEngine';
+
+describe('Truco Engine', () => {
+  it('initializes match correctly', () => {
+    const match = createTrucoMatch(30);
+    expect(match.usScore).toBe(0);
+    expect(match.themScore).toBe(0);
+    expect(match.winner).toBeNull();
+    expect(match.target).toBe(30);
+  });
+
+  it('adds points and detects winner when target is reached', () => {
+    let match = createTrucoMatch(15);
+    match = addPoints(match, 'us', 12);
+    expect(match.usScore).toBe(12);
+    expect(match.winner).toBeNull();
+
+    match = addPoints(match, 'us', 4);
+    expect(match.usScore).toBe(15);
+    expect(match.winner).toBe('us');
+  });
+
+  it('supports undoing last action', () => {
+    let match = createTrucoMatch(30);
+    match = addPoints(match, 'us', 3);
+    match = addPoints(match, 'them', 2);
+    expect(match.usScore).toBe(3);
+    expect(match.themScore).toBe(2);
+
+    match = undoTrucoMatch(match);
+    expect(match.usScore).toBe(3);
+    expect(match.themScore).toBe(0);
+  });
+});
+`,
+
+  'src/features/truco/TrucoScreen.module.css': `.screen {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  user-select: none;
-  -webkit-user-select: none;
-  touch-action: none;
+  background: linear-gradient(135deg, #0e5a3a 0%, #137a4d 100%);
+  border-radius: var(--radius-xl);
+  padding: var(--space-4);
+  border: 3px solid var(--truco-wood);
+  box-shadow: var(--shadow-md);
+  color: var(--truco-ivory);
+  min-height: calc(100dvh - 120px);
 }
 
-.hud {
-  display: grid;
-  grid-template-columns: 1fr 1fr auto;
-  gap: var(--space-3);
-  align-items: center;
-}
-
-.scoreCard {
-  background-color: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  padding: var(--space-2) var(--space-4);
+.topBar {
   display: flex;
-  flex-direction: column;
-  box-shadow: var(--shadow-sm);
+  align-items: center;
+  justify-content: space-between;
 }
 
-.scoreLabel {
-  font-size: 0.72rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--color-text-muted);
+.targetSelector {
+  display: flex;
+  background-color: rgba(0, 0, 0, 0.3);
+  padding: 3px;
+  border-radius: var(--radius-full);
+  gap: 2px;
 }
 
-.scoreValue {
-  font-family: var(--font-display);
-  font-size: 1.45rem;
+.targetBtn {
+  padding: 6px 12px;
+  border-radius: var(--radius-full);
+  font-size: 0.75rem;
   font-weight: 700;
-  color: var(--color-text);
-  line-height: 1.15;
+  color: var(--truco-ivory);
+  background: transparent;
+  transition: background-color 0.15s ease;
 }
 
-.bestValue {
-  color: var(--color-warning);
+.targetBtnActive {
+  background-color: var(--truco-gold);
+  color: #1b1e3a;
 }
 
-.hudActions {
+.topActions {
   display: flex;
-  align-items: center;
   gap: var(--space-2);
 }
 
-.comboBadge {
-  padding: 6px 10px;
-  border-radius: var(--radius-full);
-  background: linear-gradient(135deg, var(--color-accent), var(--color-accent-2));
-  color: #ffffff;
-  font-family: var(--font-display);
-  font-size: 0.85rem;
-  font-weight: 700;
-  box-shadow: var(--shadow-sm);
-  animation: pulseBadge 0.3s ease;
-}
-
-@keyframes pulseBadge {
-  0% { transform: scale(0.8); }
-  50% { transform: scale(1.15); }
-  100% { transform: scale(1); }
-}
-
 .iconBtn {
-  width: 44px;
-  height: 44px;
+  width: 40px;
+  height: 40px;
   border-radius: var(--radius-md);
-  background-color: var(--color-surface);
-  border: 1px solid var(--color-border);
+  background-color: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.15);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--color-text);
-  box-shadow: var(--shadow-sm);
-  transition: transform 0.12s ease;
+  color: var(--truco-ivory);
+  transition: transform 0.1s ease;
 }
 
-.iconBtn:active {
-  transform: scale(0.94);
-}
+.iconBtn:active { transform: scale(0.92); }
+.iconBtn:disabled { opacity: 0.4; cursor: not-allowed; }
 
-/* Board */
-.boardWrapper {
-  position: relative;
-  width: 100%;
-  aspect-ratio: 1 / 1;
-  background-color: var(--color-surface);
-  border: 2px solid var(--color-border);
-  border-radius: var(--radius-xl);
-  padding: var(--space-2);
-  box-shadow: var(--shadow-md);
-  touch-action: none;
-}
-
-.boardGrid {
-  width: 100%;
-  height: 100%;
+/* Teams Board Grid */
+.teamsGrid {
   display: grid;
-  grid-template-columns: repeat(8, 1fr);
-  grid-template-rows: repeat(8, 1fr);
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+  flex: 1;
+}
+
+.teamColumn {
+  background-color: rgba(0, 0, 0, 0.22);
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.teamHeader {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.teamName {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.teamScoreBig {
+  font-family: var(--font-display);
+  font-size: 2.2rem;
+  font-weight: 700;
+  color: var(--truco-gold);
+  line-height: 1;
+}
+
+/* Matchsticks Area */
+.matchesBox {
+  flex: 1;
+  background-color: rgba(0, 0, 0, 0.28);
+  border-radius: var(--radius-md);
+  padding: var(--space-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-height: 160px;
+  overflow-y: auto;
+}
+
+.sectionLabel {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--truco-gold);
+  opacity: 0.85;
+}
+
+.bundleGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.bundle {
+  width: 32px;
+  height: 32px;
+  border: 1px dashed rgba(245, 235, 208, 0.25);
+  border-radius: var(--radius-sm);
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.matchstick {
+  position: absolute;
+  background-color: var(--truco-ivory);
+  border-radius: 2px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+}
+
+.stick1 { width: 3px; height: 22px; left: 6px; top: 5px; }
+.stick2 { width: 3px; height: 22px; left: 12px; top: 5px; }
+.stick3 { width: 3px; height: 22px; left: 18px; top: 5px; }
+.stick4 { width: 3px; height: 22px; left: 24px; top: 5px; }
+.stick5 {
+  width: 30px;
+  height: 3px;
+  left: 1px;
+  top: 15px;
+  transform: rotate(35deg);
+}
+
+/* Score Buttons */
+.controlsStack {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.quickRow {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
   gap: 4px;
 }
 
-.cell {
-  border-radius: 7px;
-  background-color: var(--color-surface-2);
-  border: 1px solid rgba(255, 255, 255, 0.04);
-  position: relative;
-  transition: transform 0.1s ease, background-color 0.1s ease;
+.quickBtn {
+  min-height: 38px;
+  border-radius: var(--radius-sm);
+  background-color: rgba(255, 255, 255, 0.15);
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--truco-ivory);
+  transition: background-color 0.1s ease;
 }
 
-.blockFilled {
-  border: 1px solid rgba(255, 255, 255, 0.28);
-  box-shadow: inset 0 3px 0 rgba(255, 255, 255, 0.35), inset 0 -2px 0 rgba(0, 0, 0, 0.2);
-  animation: popBlock 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+.quickBtn:active { background-color: var(--truco-gold); color: #1b1e3a; }
+
+.mainPlusBtn {
+  min-height: 48px;
+  border-radius: var(--radius-md);
+  background-color: var(--truco-gold);
+  color: #1b1e3a;
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 700;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
 }
 
-@keyframes popBlock {
-  0% { transform: scale(0.7); }
-  100% { transform: scale(1); }
-}
+.mainPlusBtn:active { transform: scale(0.97); }
 
-.color_red { background: linear-gradient(180deg, #ff758f 0%, var(--block-red) 100%); }
-.color_orange { background: linear-gradient(180deg, #ffb266 0%, var(--block-orange) 100%); }
-.color_yellow { background: linear-gradient(180deg, #ffe366 0%, var(--block-yellow) 100%); }
-.color_green { background: linear-gradient(180deg, #5ce6ad 0%, var(--block-green) 100%); }
-.color_cyan { background: linear-gradient(180deg, #72d6f5 0%, var(--block-cyan) 100%); }
-.color_blue { background: linear-gradient(180deg, #7096ff 0%, var(--block-blue) 100%); }
-.color_purple { background: linear-gradient(180deg, #c6a6ff 0%, var(--block-purple) 100%); }
-
-.cellGhost {
-  opacity: 0.48;
-  transform: scale(0.95);
-}
-
-.cellWillClear {
-  box-shadow: 0 0 0 2px var(--color-warning), inset 0 0 10px rgba(255, 217, 61, 0.75) !important;
-  filter: brightness(1.22);
-  animation: flashLine 0.4s infinite alternate;
-}
-
-@keyframes flashLine {
-  0% { opacity: 0.7; }
-  100% { opacity: 1; }
-}
-
-/* Modals & Overlays */
+/* Celebration Overlay */
 .overlay {
   position: absolute;
   inset: 0;
-  background-color: rgba(15, 18, 38, 0.88);
+  background-color: rgba(14, 90, 58, 0.94);
   backdrop-filter: blur(6px);
   border-radius: var(--radius-xl);
   display: flex;
@@ -464,518 +404,309 @@ export const useGameStore = create<GameState>()(
   justify-content: center;
   gap: var(--space-4);
   padding: var(--space-6);
-  z-index: 20;
-  animation: fadeIn 0.2s ease;
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: scale(0.96); }
-  to { opacity: 1; transform: scale(1); }
+  z-index: 30;
 }
 
 .modalTitle {
   font-family: var(--font-display);
-  font-size: 1.6rem;
+  font-size: 1.8rem;
   font-weight: 700;
+  color: var(--truco-gold);
   text-align: center;
 }
 
 .modalSub {
-  font-size: 0.9rem;
-  color: var(--color-text-muted);
+  font-size: 1.1rem;
   text-align: center;
-  max-width: 280px;
-}
-
-.recordBadge {
-  padding: 6px 14px;
-  border-radius: var(--radius-full);
-  background-color: var(--color-warning);
-  color: #1b1e3a;
-  font-family: var(--font-display);
-  font-size: 0.85rem;
-  font-weight: 700;
 }
 
 .primaryBtn {
   width: 100%;
+  max-width: 280px;
   min-height: 48px;
   border-radius: var(--radius-md);
-  background-color: var(--color-accent);
-  color: #ffffff;
+  background-color: var(--truco-gold);
+  color: #1b1e3a;
   font-family: var(--font-display);
   font-size: 1rem;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
+  font-weight: 700;
   box-shadow: var(--shadow-sm);
-  transition: transform 0.12s ease;
 }
-
-.primaryBtn:active { transform: scale(0.98); }
-
-.secondaryBtn {
-  width: 100%;
-  min-height: 48px;
-  border-radius: var(--radius-md);
-  background-color: var(--color-surface-2);
-  border: 1px solid var(--color-border);
-  color: var(--color-text);
-  font-family: var(--font-display);
-  font-size: 0.95rem;
-  font-weight: 600;
-}
-
-/* Tray */
-.tray {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: var(--space-3);
-  min-height: 116px;
-  background-color: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-xl);
-  padding: var(--space-3);
-  box-shadow: var(--shadow-sm);
-  touch-action: none;
-}
-
-.traySlot {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-md);
-  background-color: var(--color-surface-2);
-  min-height: 92px;
-  position: relative;
-  touch-action: none;
-}
-
-.traySlotInteractive { cursor: grab; }
-.traySlotDragging { opacity: 0.2; }
-.traySlotDisabled { opacity: 0.35; }
-
-.miniPieceGrid {
-  display: grid;
-  gap: 3px;
-  pointer-events: none;
-}
-
-.miniCell { width: 15px; height: 15px; border-radius: 4px; }
-.miniCellEmpty { background-color: transparent; }
-
-.floatingPiece {
-  position: fixed;
-  top: 0;
-  left: 0;
-  pointer-events: none;
-  z-index: 100;
-  will-change: transform;
-}
-
-.floatingGrid { display: grid; gap: 4px; }
 `,
 
-  'src/features/game/GameScreen.tsx': `import { useRef, useState } from 'react';
-import type { PointerEvent as ReactPointerEvent } from 'react';
-import { Pause, Play, RotateCcw, Share2, Home } from 'lucide-react';
+  'src/features/truco/TrucoScreen.tsx': `import { useState, useEffect } from 'react';
+import { Undo2, RotateCcw, Trophy } from 'lucide-react';
 import { t } from '@/i18n';
 import { useSettingsStore } from '@/features/settings/settingsStore';
-import { useGameStore } from './gameStore';
 import {
-  GRID_SIZE,
-  canPlacePiece,
-  canPieceFitAnywhere,
-  getPreviewClearLines,
-} from './engine';
-import type { PieceInstance } from './types';
-import styles from './GameScreen.module.css';
+  createTrucoMatch,
+  addPoints,
+  undoTrucoMatch,
+  type TargetScore,
+  type TrucoMatchState,
+} from './trucoEngine';
+import { triggerHaptic } from '@/platform/haptics';
+import styles from './TrucoScreen.module.css';
 
-interface DragState {
-  trayIndex: number;
-  piece: PieceInstance;
-  pointerId: number;
-  clientX: number;
-  clientY: number;
-  liftY: number;
-  cellSize: number;
-  snapRow: number | null;
-  snapCol: number | null;
-}
+export function TrucoScreen() {
+  const { trucoWinsUs, trucoWinsThem } = useSettingsStore();
+  const [match, setMatch] = useState<TrucoMatchState>(() => createTrucoMatch(30));
 
-export function GameScreen() {
-  const {
-    grid,
-    tray,
-    score,
-    combo,
-    isOver,
-    isPaused,
-    startNewGame,
-    pauseGame,
-    placeTrayPiece,
-  } = useGameStore();
-  const highScore = useSettingsStore((state) => state.highScore);
+  const handleAdd = (team: 'us' | 'them', pts: number) => {
+    const next = addPoints(match, team, pts);
+    triggerHaptic(20);
 
-  const boardRef = useRef<HTMLDivElement | null>(null);
-  const [drag, setDrag] = useState<DragState | null>(null);
-  const [copiedShare, setCopiedShare] = useState(false);
-
-  const computeBoardSnap = (
-    clientX: number,
-    clientY: number,
-    liftY: number,
-    piece: PieceInstance
-  ) => {
-    const boardEl = boardRef.current;
-    if (!boardEl) return { row: null, col: null, cellSize: 38 };
-
-    const rect = boardEl.getBoundingClientRect();
-    const cellSize = rect.width / GRID_SIZE;
-
-    const rows = piece.matrix.length;
-    const cols = piece.matrix[0]?.length ?? 1;
-    const pieceWidth = cols * cellSize;
-    const pieceHeight = rows * cellSize;
-
-    const pieceLeft = clientX - pieceWidth / 2;
-    const pieceTop = clientY - liftY - pieceHeight / 2;
-
-    const firstCellCenterX = pieceLeft + cellSize / 2;
-    const firstCellCenterY = pieceTop + cellSize / 2;
-
-    const col = Math.floor((firstCellCenterX - rect.left) / cellSize);
-    const row = Math.floor((firstCellCenterY - rect.top) / cellSize);
-
-    if (canPlacePiece(grid, piece.matrix, row, col)) {
-      return { row, col, cellSize };
-    }
-    return { row: null, col: null, cellSize };
-  };
-
-  const handlePointerDown = (
-    e: ReactPointerEvent<HTMLDivElement>,
-    trayIndex: number,
-    piece: PieceInstance
-  ) => {
-    if (isOver || isPaused) return;
-    e.preventDefault();
-    e.currentTarget.setPointerCapture(e.pointerId);
-
-    const liftY = e.pointerType === 'touch' ? 76 : 36;
-    const { row, col, cellSize } = computeBoardSnap(
-      e.clientX,
-      e.clientY,
-      liftY,
-      piece
-    );
-
-    setDrag({
-      trayIndex,
-      piece,
-      pointerId: e.pointerId,
-      clientX: e.clientX,
-      clientY: e.clientY,
-      liftY,
-      cellSize,
-      snapRow: row,
-      snapCol: col,
-    });
-  };
-
-  const handlePointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
-    if (!drag || e.pointerId !== drag.pointerId) return;
-    e.preventDefault();
-
-    const { row, col, cellSize } = computeBoardSnap(
-      e.clientX,
-      e.clientY,
-      drag.liftY,
-      drag.piece
-    );
-
-    setDrag((prev) =>
-      prev
-        ? {
-            ...prev,
-            clientX: e.clientX,
-            clientY: e.clientY,
-            cellSize,
-            snapRow: row,
-            snapCol: col,
-          }
-        : null
-    );
-  };
-
-  const handlePointerEnd = (e: ReactPointerEvent<HTMLDivElement>) => {
-    if (!drag || e.pointerId !== drag.pointerId) return;
-    e.preventDefault();
-
-    if (drag.snapRow !== null && drag.snapCol !== null) {
-      placeTrayPiece(drag.trayIndex, drag.snapRow, drag.snapCol);
-    }
-
-    setDrag(null);
-  };
-
-  const handleShare = async () => {
-    const text = \`¡Hice \${score} puntos en TrucoBlock (Bloques 8x8)! 🧩\`;
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: 'TrucoBlock', text });
-        return;
-      } catch {
-        // Fallback to clipboard
+    if (next.winner && !match.winner) {
+      if (next.winner === 'us') {
+        useSettingsStore.setState({ trucoWinsUs: trucoWinsUs + 1 });
+      } else {
+        useSettingsStore.setState({ trucoWinsThem: trucoWinsThem + 1 });
       }
     }
-    await navigator.clipboard.writeText(text);
-    setCopiedShare(true);
-    setTimeout(() => setCopiedShare(false), 2500);
+    setMatch(next);
   };
 
-  const ghostCells = new Set<string>();
-  let previewLines: { rows: number[]; cols: number[] } = { rows: [], cols: [] };
+  const handleUndo = () => {
+    setMatch(undoTrucoMatch(match));
+    triggerHaptic(10);
+  };
 
-  if (drag && drag.snapRow !== null && drag.snapCol !== null) {
-    const { matrix } = drag.piece;
-    for (let r = 0; r < matrix.length; r++) {
-      for (let c = 0; c < matrix[r].length; c++) {
-        if (matrix[r][c] === 1) {
-          ghostCells.add(\`\${drag.snapRow + r},\${drag.snapCol + c}\`);
-        }
-      }
+  const handleReset = (target: TargetScore = match.target) => {
+    setMatch(createTrucoMatch(target));
+    triggerHaptic(15);
+  };
+
+  const renderBundles = (score: number) => {
+    const bundlesCount = Math.ceil(score / 5);
+    const bundles = [];
+
+    for (let i = 0; i < bundlesCount; i++) {
+      const sticksInBundle = Math.min(5, score - i * 5);
+      bundles.push(
+        <div key={i} className={styles.bundle}>
+          {sticksInBundle >= 1 && <div className={\`\${styles.matchstick} \${styles.stick1}\`} />}
+          {sticksInBundle >= 2 && <div className={\`\${styles.matchstick} \${styles.stick2}\`} />}
+          {sticksInBundle >= 3 && <div className={\`\${styles.matchstick} \${styles.stick3}\`} />}
+          {sticksInBundle >= 4 && <div className={\`\${styles.matchstick} \${styles.stick4}\`} />}
+          {sticksInBundle === 5 && <div className={\`\${styles.matchstick} \${styles.stick5}\`} />}
+        </div>
+      );
     }
-    previewLines = getPreviewClearLines(grid, matrix, drag.snapRow, drag.snapCol);
-  }
+    return bundles;
+  };
 
-  const clearRowsSet = new Set(previewLines.rows);
-  const clearColsSet = new Set(previewLines.cols);
-  const isNewRecord = score > 0 && score >= highScore;
+  // Split score into Malas (0-15) and Buenas (15-30) when target is 30
+  const is30 = match.target === 30;
+  const usMalas = is30 ? Math.min(15, match.usScore) : match.usScore;
+  const usBuenas = is30 ? Math.max(0, match.usScore - 15) : 0;
+  const themMalas = is30 ? Math.min(15, match.themScore) : match.themScore;
+  const themBuenas = is30 ? Math.max(0, match.themScore - 15) : 0;
 
   return (
     <div className={styles.screen}>
-      {/* Top HUD */}
-      <header className={styles.hud}>
-        <div className={styles.scoreCard}>
-          <span className={styles.scoreLabel}>{t.game.score}</span>
-          <span className={styles.scoreValue}>{score}</span>
+      {/* Top Bar */}
+      <div className={styles.topBar}>
+        <div className={styles.targetSelector}>
+          <button
+            type="button"
+            className={\`\${styles.targetBtn} \${match.target === 15 ? styles.targetBtnActive : ''}\`}
+            onClick={() => handleReset(15)}
+          >
+            {t.truco.meta15}
+          </button>
+          <button
+            type="button"
+            className={\`\${styles.targetBtn} \${match.target === 30 ? styles.targetBtnActive : ''}\`}
+            onClick={() => handleReset(30)}
+          >
+            {t.truco.meta30}
+          </button>
         </div>
 
-        <div className={styles.scoreCard}>
-          <span className={styles.scoreLabel}>{t.game.best}</span>
-          <span className={\`\${styles.scoreValue} \${styles.bestValue}\`}>
-            {Math.max(score, highScore)}
-          </span>
-        </div>
-
-        <div className={styles.hudActions}>
-          {combo > 0 && <span className={styles.comboBadge}>x{combo}</span>}
+        <div className={styles.topActions}>
           <button
             type="button"
             className={styles.iconBtn}
-            onClick={() => pauseGame(true)}
-            aria-label={t.game.pauseAria}
+            onClick={handleUndo}
+            disabled={match.history.length === 0}
+            aria-label={t.truco.undo}
           >
-            <Pause size={20} />
+            <Undo2 size={18} />
+          </button>
+          <button
+            type="button"
+            className={styles.iconBtn}
+            onClick={() => handleReset(match.target)}
+            aria-label={t.truco.reset}
+          >
+            <RotateCcw size={18} />
           </button>
         </div>
-      </header>
+      </div>
 
-      {/* 8x8 Board */}
-      <section
-        ref={boardRef}
-        className={styles.boardWrapper}
-        aria-label={t.game.boardAria}
-      >
-        <div className={styles.boardGrid}>
-          {grid.map((rowCells, r) =>
-            rowCells.map((cellColor, c) => {
-              const key = \`\${r},\${c}\`;
-              const isGhost = ghostCells.has(key);
-              const willClear = clearRowsSet.has(r) || clearColsSet.has(c);
+      {/* Teams Grid */}
+      <div className={styles.teamsGrid}>
+        {/* Nosotros */}
+        <div className={styles.teamColumn}>
+          <div className={styles.teamHeader}>
+            <span className={styles.teamName}>{t.truco.us}</span>
+            <span className={styles.teamScoreBig}>{match.usScore}</span>
+          </div>
 
-              const activeColor = cellColor ?? (isGhost ? drag?.piece.color : null);
-              const colorClass = activeColor ? styles[\`color_\${activeColor}\`] : '';
+          <div className={styles.matchesBox}>
+            <span className={styles.sectionLabel}>{t.truco.malas}</span>
+            <div className={styles.bundleGrid}>{renderBundles(usMalas)}</div>
 
-              return (
-                <div
-                  key={key}
-                  className={[
-                    styles.cell,
-                    activeColor ? styles.blockFilled : '',
-                    colorClass,
-                    isGhost && !cellColor ? styles.cellGhost : '',
-                    willClear ? styles.cellWillClear : '',
-                  ]
-                    .filter(Boolean)
-                    .join(' ')}
-                />
-              );
-            })
-          )}
+            {is30 && (
+              <>
+                <span className={styles.sectionLabel} style={{ marginTop: 8 }}>
+                  {t.truco.buenas}
+                </span>
+                <div className={styles.bundleGrid}>{renderBundles(usBuenas)}</div>
+              </>
+            )}
+          </div>
+
+          <div className={styles.controlsStack}>
+            <div className={styles.quickRow}>
+              <button type="button" className={styles.quickBtn} onClick={() => handleAdd('us', 2)}>
+                +2
+              </button>
+              <button type="button" className={styles.quickBtn} onClick={() => handleAdd('us', 3)}>
+                +3
+              </button>
+              <button type="button" className={styles.quickBtn} onClick={() => handleAdd('us', 4)}>
+                +4
+              </button>
+            </div>
+            <button
+              type="button"
+              className={styles.mainPlusBtn}
+              onClick={() => handleAdd('us', 1)}
+            >
+              +1
+            </button>
+          </div>
         </div>
 
-        {/* Pause Modal Overlay */}
-        {isPaused && (
-          <div className={styles.overlay}>
-            <h2 className={styles.modalTitle}>{t.game.pauseTitle}</h2>
-            <button
-              type="button"
-              className={styles.primaryBtn}
-              onClick={() => pauseGame(false)}
-            >
-              <Play size={18} fill="currentColor" />
-              {t.game.resume}
-            </button>
-            <button
-              type="button"
-              className={styles.secondaryBtn}
-              onClick={() => {
-                pauseGame(false);
-                startNewGame();
-              }}
-            >
-              <RotateCcw size={18} style={{ marginRight: 8 }} />
-              {t.game.restart}
-            </button>
+        {/* Ellos */}
+        <div className={styles.teamColumn}>
+          <div className={styles.teamHeader}>
+            <span className={styles.teamName}>{t.truco.them}</span>
+            <span className={styles.teamScoreBig}>{match.themScore}</span>
           </div>
-        )}
 
-        {/* Game Over Modal Overlay */}
-        {isOver && (
-          <div className={styles.overlay}>
-            <h2 className={styles.modalTitle}>{t.game.gameOverTitle}</h2>
-            {isNewRecord && (
-              <span className={styles.recordBadge}>{t.game.newRecordBadge}</span>
+          <div className={styles.matchesBox}>
+            <span className={styles.sectionLabel}>{t.truco.malas}</span>
+            <div className={styles.bundleGrid}>{renderBundles(themMalas)}</div>
+
+            {is30 && (
+              <>
+                <span className={styles.sectionLabel} style={{ marginTop: 8 }}>
+                  {t.truco.buenas}
+                </span>
+                <div className={styles.bundleGrid}>{renderBundles(themBuenas)}</div>
+              </>
             )}
-            <p className={styles.modalSub}>
-              {t.game.finalScore}: <strong>{score}</strong>
-            </p>
-
-            <button
-              type="button"
-              className={styles.primaryBtn}
-              onClick={startNewGame}
-            >
-              <RotateCcw size={18} />
-              {t.game.playAgain}
-            </button>
-
-            <button
-              type="button"
-              className={styles.secondaryBtn}
-              onClick={handleShare}
-            >
-              <Share2 size={18} style={{ marginRight: 8 }} />
-              {copiedShare ? t.game.shareCopied : t.game.shareScore}
-            </button>
           </div>
-        )}
-      </section>
 
-      {/* 3-Piece Tray */}
-      <section className={styles.tray} aria-label={t.game.trayAria}>
-        {tray.map((piece, idx) => {
-          if (!piece) {
-            return <div key={idx} className={styles.traySlot} />;
-          }
-
-          const rows = piece.matrix.length;
-          const cols = piece.matrix[0]?.length ?? 1;
-          const isBeingDragged = drag?.trayIndex === idx;
-          const fitsSomewhere = canPieceFitAnywhere(grid, piece.matrix);
-
-          return (
-            <div
-              key={piece.uid}
-              className={[
-                styles.traySlot,
-                styles.traySlotInteractive,
-                isBeingDragged ? styles.traySlotDragging : '',
-                !fitsSomewhere ? styles.traySlotDisabled : '',
-              ]
-                .filter(Boolean)
-                .join(' ')}
-              onPointerDown={(e) => handlePointerDown(e, idx, piece)}
-              onPointerMove={handlePointerMove}
-              onPointerUp={handlePointerEnd}
-              onPointerCancel={handlePointerEnd}
-            >
-              <div
-                className={styles.miniPieceGrid}
-                style={{
-                  gridTemplateColumns: \`repeat(\${cols}, 15px)\`,
-                  gridTemplateRows: \`repeat(\${rows}, 15px)\`,
-                }}
-              >
-                {piece.matrix.map((rowArr, r) =>
-                  rowArr.map((val, c) => (
-                    <div
-                      key={\`\${r}-\${c}\`}
-                      className={
-                        val === 1
-                          ? \`\${styles.miniCell} \${styles.blockFilled} \${styles[\`color_\${piece.color}\`]}\`
-                          : styles.miniCellEmpty
-                      }
-                    />
-                  ))
-                )}
-              </div>
+          <div className={styles.controlsStack}>
+            <div className={styles.quickRow}>
+              <button type="button" className={styles.quickBtn} onClick={() => handleAdd('them', 2)}>
+                +2
+              </button>
+              <button type="button" className={styles.quickBtn} onClick={() => handleAdd('them', 3)}>
+                +3
+              </button>
+              <button type="button" className={styles.quickBtn} onClick={() => handleAdd('them', 4)}>
+                +4
+              </button>
             </div>
-          );
-        })}
-      </section>
-
-      {/* Floating Piece under Pointer */}
-      {drag && (
-        <div
-          className={styles.floatingPiece}
-          style={{
-            transform: \`translate3d(\${
-              drag.clientX -
-              ((drag.piece.matrix[0]?.length ?? 1) * drag.cellSize) / 2
-            }px, \${
-              drag.clientY -
-              drag.liftY -
-              (drag.piece.matrix.length * drag.cellSize) / 2
-            }px, 0)\`,
-          }}
-        >
-          <div
-            className={styles.floatingGrid}
-            style={{
-              gridTemplateColumns: \`repeat(\${
-                drag.piece.matrix[0]?.length ?? 1
-              }, \${drag.cellSize - 4}px)\`,
-              gridTemplateRows: \`repeat(\${drag.piece.matrix.length}, \${
-                drag.cellSize - 4
-              }px)\`,
-            }}
-          >
-            {drag.piece.matrix.map((rowArr, r) =>
-              rowArr.map((val, c) => (
-                <div
-                  key={\`float-\${r}-\${c}\`}
-                  className={
-                    val === 1
-                      ? \`\${styles.cell} \${styles.blockFilled} \${styles[\`color_\${drag.piece.color}\`]}\`
-                      : ''
-                  }
-                  style={{
-                    width: drag.cellSize - 4,
-                    height: drag.cellSize - 4,
-                    opacity: val === 1 ? 0.95 : 0,
-                  }}
-                />
-              ))
-            )}
+            <button
+              type="button"
+              className={styles.mainPlusBtn}
+              onClick={() => handleAdd('them', 1)}
+            >
+              +1
+            </button>
           </div>
+        </div>
+      </div>
+
+      {/* Winner Celebration Modal */}
+      {match.winner && (
+        <div className={styles.overlay}>
+          <Trophy size={54} color="var(--truco-gold)" />
+          <h2 className={styles.modalTitle}>{t.truco.matchWon}</h2>
+          <p className={styles.modalSub}>
+            Ganó el equipo: <strong>{match.winner === 'us' ? t.truco.us : t.truco.them}</strong>
+          </p>
+          <button
+            type="button"
+            className={styles.primaryBtn}
+            onClick={() => handleReset(match.target)}
+          >
+            {t.truco.revancha}
+          </button>
         </div>
       )}
     </div>
+  );
+}
+`,
+
+  'src/app/App.tsx': `import { useEffect } from 'react';
+import { HashRouter, Routes, Route } from 'react-router-dom';
+import { AppShell } from '@/components/AppShell';
+import { HomeScreen } from '@/features/home/HomeScreen';
+import { GameScreen } from '@/features/game/GameScreen';
+import { TrucoScreen } from '@/features/truco/TrucoScreen';
+import { useSettingsStore, applyThemeToDOM } from '@/features/settings/settingsStore';
+import { t } from '@/i18n';
+
+function PlaceholderView({ title, desc }: { title: string; desc: string }) {
+  return (
+    <section
+      style={{
+        backgroundColor: 'var(--color-surface)',
+        border: '1px solid var(--color-border)',
+        borderRadius: 'var(--radius-xl)',
+        padding: 'var(--space-6)',
+        marginTop: 'var(--space-4)',
+      }}
+    >
+      <h2 style={{ marginBottom: 'var(--space-2)' }}>{title}</h2>
+      <p style={{ color: 'var(--color-text-muted)' }}>{desc}</p>
+    </section>
+  );
+}
+
+export function App() {
+  const theme = useSettingsStore((state) => state.theme);
+
+  useEffect(() => {
+    applyThemeToDOM(theme);
+  }, [theme]);
+
+  return (
+    <HashRouter>
+      <AppShell>
+        <Routes>
+          <Route path="/" element={<HomeScreen />} />
+          <Route path="/game" element={<GameScreen />} />
+          <Route path="/truco" element={<TrucoScreen />} />
+          <Route
+            path="/settings"
+            element={
+              <PlaceholderView
+                title={t.placeholders.settingsTitle}
+                desc={t.placeholders.settingsDesc}
+              />
+            }
+          />
+        </Routes>
+      </AppShell>
+    </HashRouter>
   );
 }
 `,
@@ -987,7 +718,7 @@ export function GameScreen() {
 - [x] Fase 2: Lógica del juego (funciones puras + tests)
 - [x] Fase 3: UI del juego: tablero, bandeja, drag & drop, vista previa
 - [x] Fase 4: Pulido del juego: animaciones, combos, sonido, vibración, pausa, persistencia
-- [ ] Fase 5: Truco: lógica + tests + UI + palitos + historial
+- [x] Fase 5: Truco: lógica + tests + UI + palitos + historial
 - [ ] Fase 6: Ajustes, estadísticas, compartir, i18n, accesibilidad
 - [ ] Fase 7: PWA: manifest, service worker, íconos, offline, instalación
 - [ ] Fase 8: QA y deploy
@@ -1001,4 +732,4 @@ for (const [relativePath, content] of Object.entries(files)) {
   console.log('[OK] Creado/Actualizado:', relativePath);
 }
 
-console.log('\n¡Fase 4 lista! Probá el sonido y las animaciones en el navegador.');
+console.log('\n¡Fase 5 lista! Ejecutá npm run test para verificar los tests.');
