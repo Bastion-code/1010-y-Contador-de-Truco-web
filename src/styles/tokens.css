@@ -1,0 +1,86 @@
+:root,
+[data-theme='dark'] {
+  /* Base Dark Theme (Default) */
+  --color-bg: #0f1226;
+  --color-surface: #1a1f3d;
+  --color-surface-2: #252b52;
+  --color-border: #323a6b;
+  --color-text: #f2f4ff;
+  --color-text-muted: #9aa3cf;
+
+  /* Accents & Semantic */
+  --color-accent: #7c5cff;
+  --color-accent-hover: #6946ff;
+  --color-accent-2: #22d3ee;
+  --color-success: #3ddc97;
+  --color-warning: #ffd93d;
+  --color-error: #ff5c7a;
+
+  /* Shadows */
+  --shadow-sm: 0 4px 12px rgba(5, 7, 20, 0.35);
+  --shadow-md: 0 10px 25px rgba(5, 7, 20, 0.5);
+}
+
+[data-theme='light'] {
+  /* Light Theme */
+  --color-bg: #f5f6ff;
+  --color-surface: #ffffff;
+  --color-surface-2: #e9ecff;
+  --color-border: #d3d8f5;
+  --color-text: #1b1e3a;
+  --color-text-muted: #5b6191;
+
+  --color-accent: #7c5cff;
+  --color-accent-hover: #6946ff;
+  --color-accent-2: #22d3ee;
+  --color-success: #3ddc97;
+  --color-warning: #ffd93d;
+  --color-error: #ff5c7a;
+
+  --shadow-sm: 0 4px 12px rgba(27, 30, 58, 0.08);
+  --shadow-md: 0 10px 25px rgba(27, 30, 58, 0.14);
+}
+
+:root {
+  /* Block Puzzle Palette (7 colors) */
+  --block-red: #ff5c7a;
+  --block-orange: #ff9f43;
+  --block-yellow: #ffd93d;
+  --block-green: #3ddc97;
+  --block-cyan: #4cc9f0;
+  --block-blue: #4d7cff;
+  --block-purple: #b388ff;
+
+  /* Truco Table Identity */
+  --truco-felt-start: #0e5a3a;
+  --truco-felt-end: #137a4d;
+  --truco-wood: #8b5a2b;
+  --truco-ivory: #f5ebd0;
+  --truco-gold: #e6b422;
+  --truco-us: #3ddc97;
+  --truco-them: #ff5c7a;
+
+  /* Typography */
+  --font-display: 'Fredoka', system-ui, -apple-system, sans-serif;
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+
+  /* Spacing Scale */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  /* Border Radius (Playful 16-24px) */
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 20px;
+  --radius-xl: 24px;
+  --radius-full: 9999px;
+
+  /* Layout */
+  --app-max-width: 480px;
+  --nav-height: 68px;
+}
