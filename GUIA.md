@@ -7,6 +7,6 @@
 - [x] Fase 4: Pulido del juego: animaciones, combos, sonido, vibración, pausa, persistencia
 - [x] Fase 5: Truco: lógica + tests + UI + palitos + historial
 - [x] Fase 6: Ajustes, estadísticas, compartir, i18n, accesibilidad
-- [ ] Fase 7: PWA: manifest, service worker, íconos, offline, instalación
+- [x] Fase 7: PWA: manifest, service worker, íconos, offline, instalación
 - [ ] Fase 8: QA y deploy
 - [ ] Fase 9: (Futuro) iOS con Capacitor

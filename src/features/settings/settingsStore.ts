@@ -40,14 +40,17 @@ export const useSettingsStore = create<SettingsState>()(
       },
       setSoundEnabled: (soundEnabled) => set({ soundEnabled }),
       setHapticsEnabled: (hapticsEnabled) => set({ hapticsEnabled }),
-      resetAllData: () =>
+      resetAllData: () => {
         set({
           highScore: 0,
           gamesPlayed: 0,
           hasSavedGame: false,
           trucoWinsUs: 0,
           trucoWinsThem: 0,
-        }),
+        });
+        // Limpiamos también el storage del juego guardado
+        webStorage.removeItem('trucoblock-game');
+      },
     }),
     {
       name: 'trucoblock-settings',
