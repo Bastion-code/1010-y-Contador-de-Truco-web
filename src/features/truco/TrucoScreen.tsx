@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Undo2, RotateCcw, Trophy } from 'lucide-react';
 import { t } from '@/i18n';
 import { useSettingsStore } from '@/features/settings/settingsStore';
@@ -59,7 +59,6 @@ export function TrucoScreen() {
     return bundles;
   };
 
-  // Split score into Malas (0-15) and Buenas (15-30) when target is 30
   const is30 = match.target === 30;
   const usMalas = is30 ? Math.min(15, match.usScore) : match.usScore;
   const usBuenas = is30 ? Math.max(0, match.usScore - 15) : 0;

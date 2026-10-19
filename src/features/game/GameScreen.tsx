@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
-import { Pause, Play, RotateCcw, Share2, Home } from 'lucide-react';
+import { Pause, Play, RotateCcw, Share2 } from 'lucide-react';
 import { t } from '@/i18n';
 import { useSettingsStore } from '@/features/settings/settingsStore';
 import { useGameStore } from './gameStore';
