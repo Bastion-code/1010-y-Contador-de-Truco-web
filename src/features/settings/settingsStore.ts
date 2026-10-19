@@ -16,6 +16,9 @@ interface SettingsState {
   trucoWinsThem: number;
   setTheme: (theme: ThemeMode) => void;
   toggleQuickTheme: () => void;
+  setSoundEnabled: (enabled: boolean) => void;
+  setHapticsEnabled: (enabled: boolean) => void;
+  resetAllData: () => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -35,6 +38,16 @@ export const useSettingsStore = create<SettingsState>()(
         const current = get().theme;
         set({ theme: current === 'light' ? 'dark' : 'light' });
       },
+      setSoundEnabled: (soundEnabled) => set({ soundEnabled }),
+      setHapticsEnabled: (hapticsEnabled) => set({ hapticsEnabled }),
+      resetAllData: () =>
+        set({
+          highScore: 0,
+          gamesPlayed: 0,
+          hasSavedGame: false,
+          trucoWinsUs: 0,
+          trucoWinsThem: 0,
+        }),
     }),
     {
       name: 'trucoblock-settings',

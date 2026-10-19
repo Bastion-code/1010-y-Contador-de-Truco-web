@@ -1,8 +1,9 @@
-import { APP_NAME } from '@/app/config';
+import { APP_NAME, APP_VERSION } from '@/app/config';
 
 export const esAR = {
   app: {
     name: APP_NAME,
+    version: `Versión ${APP_VERSION}`,
     subtitle: 'Bloques + Truco Argentino',
   },
   nav: {
@@ -71,9 +72,23 @@ export const esAR = {
     historyTitle: 'Historial de Partidas',
     winsCount: 'victorias',
   },
-  placeholders: {
-    settingsTitle: 'Ajustes (Fase 6)',
-    settingsDesc: 'Configuración de sonido, vibración, tema y datos.',
+  settings: {
+    title: 'Ajustes y Preferencias',
+    sound: 'Efectos de sonido',
+    soundDesc: 'Tonos sintetizados al colocar y limpiar bloques',
+    haptics: 'Vibración háptica',
+    hapticsDesc: 'Respuesta táctil al interactuar',
+    theme: 'Tema visual',
+    themeDark: 'Oscuro',
+    themeLight: 'Claro',
+    themeAuto: 'Automático (Sistema)',
+    data: 'Gestión de datos',
+    resetData: 'Borrar todos los datos',
+    resetConfirm: '¿Estás seguro de borrar récords y estadísticas? Esta acción no se puede deshacer.',
+    cancel: 'Cancelar',
+    confirm: 'Sí, borrar',
+    about: 'Acerca de',
+    credits: 'Desarrollado como PWA 2 en 1 offline-first.',
   },
 } as const;
 

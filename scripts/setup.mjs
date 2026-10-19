@@ -2,7 +2,7 @@ import { mkdirSync, existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const dirs = [
-  'src/features/truco',
+  'src/features/settings',
 ];
 
 for (const dir of dirs) {
@@ -13,11 +13,12 @@ for (const dir of dirs) {
 }
 
 const files = {
-  'src/i18n/es-AR.ts': `import { APP_NAME } from '@/app/config';
+  'src/i18n/es-AR.ts': `import { APP_NAME, APP_VERSION } from '@/app/config';
 
 export const esAR = {
   app: {
     name: APP_NAME,
+    version: \`Versión \${APP_VERSION}\`,
     subtitle: 'Bloques + Truco Argentino',
   },
   nav: {
@@ -86,572 +87,424 @@ export const esAR = {
     historyTitle: 'Historial de Partidas',
     winsCount: 'victorias',
   },
-  placeholders: {
-    settingsTitle: 'Ajustes (Fase 6)',
-    settingsDesc: 'Configuración de sonido, vibración, tema y datos.',
+  settings: {
+    title: 'Ajustes y Preferencias',
+    sound: 'Efectos de sonido',
+    soundDesc: 'Tonos sintetizados al colocar y limpiar bloques',
+    haptics: 'Vibración háptica',
+    hapticsDesc: 'Respuesta táctil al interactuar',
+    theme: 'Tema visual',
+    themeDark: 'Oscuro',
+    themeLight: 'Claro',
+    themeAuto: 'Automático (Sistema)',
+    data: 'Gestión de datos',
+    resetData: 'Borrar todos los datos',
+    resetConfirm: '¿Estás seguro de borrar récords y estadísticas? Esta acción no se puede deshacer.',
+    cancel: 'Cancelar',
+    confirm: 'Sí, borrar',
+    about: 'Acerca de',
+    credits: 'Desarrollado como PWA 2 en 1 offline-first.',
   },
 } as const;
 
 export type Dictionary = typeof esAR;
 `,
 
-  'src/features/truco/trucoEngine.ts': `export type TargetScore = 15 | 30;
-
-export interface TrucoMatchState {
-  target: TargetScore;
-  usScore: number;
-  themScore: number;
-  winner: 'us' | 'them' | null;
-  history: { us: number; them: number }[];
-}
-
-export function createTrucoMatch(target: TargetScore = 30): TrucoMatchState {
-  return {
-    target,
-    usScore: 0,
-    themScore: 0,
-    winner: null,
-    history: [],
-  };
-}
-
-export function addPoints(
-  state: TrucoMatchState,
-  team: 'us' | 'them',
-  points: number
-): TrucoMatchState {
-  if (state.winner !== null) return state;
-
-  const currentUs = state.usScore;
-  const currentThem = state.themScore;
-
-  const nextUs = team === 'us' ? Math.min(state.target, currentUs + points) : currentUs;
-  const nextThem = team === 'them' ? Math.min(state.target, currentThem + points) : currentThem;
-
-  let winner: 'us' | 'them' | null = null;
-  if (nextUs >= state.target) winner = 'us';
-  else if (nextThem >= state.target) winner = 'them';
-
-  return {
-    ...state,
-    usScore: nextUs,
-    themScore: nextThem,
-    winner,
-    history: [...state.history, { us: currentUs, them: currentThem }],
-  };
-}
-
-export function undoTrucoMatch(state: TrucoMatchState): TrucoMatchState {
-  if (state.history.length === 0) return state;
-  const lastState = state.history[state.history.length - 1];
-  const newHistory = state.history.slice(0, -1);
-
-  return {
-    ...state,
-    usScore: lastState.us,
-    themScore: lastState.them,
-    winner: null,
-    history: newHistory,
-  };
-}
-`,
-
-  'src/features/truco/trucoEngine.test.ts': `import { describe, it, expect } from 'vitest';
-import { createTrucoMatch, addPoints, undoTrucoMatch } from './trucoEngine';
-
-describe('Truco Engine', () => {
-  it('initializes match correctly', () => {
-    const match = createTrucoMatch(30);
-    expect(match.usScore).toBe(0);
-    expect(match.themScore).toBe(0);
-    expect(match.winner).toBeNull();
-    expect(match.target).toBe(30);
-  });
-
-  it('adds points and detects winner when target is reached', () => {
-    let match = createTrucoMatch(15);
-    match = addPoints(match, 'us', 12);
-    expect(match.usScore).toBe(12);
-    expect(match.winner).toBeNull();
-
-    match = addPoints(match, 'us', 4);
-    expect(match.usScore).toBe(15);
-    expect(match.winner).toBe('us');
-  });
-
-  it('supports undoing last action', () => {
-    let match = createTrucoMatch(30);
-    match = addPoints(match, 'us', 3);
-    match = addPoints(match, 'them', 2);
-    expect(match.usScore).toBe(3);
-    expect(match.themScore).toBe(2);
-
-    match = undoTrucoMatch(match);
-    expect(match.usScore).toBe(3);
-    expect(match.themScore).toBe(0);
-  });
-});
-`,
-
-  'src/features/truco/TrucoScreen.module.css': `.screen {
+  'src/features/settings/SettingsScreen.module.css': `.screen {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  background: linear-gradient(135deg, #0e5a3a 0%, #137a4d 100%);
-  border-radius: var(--radius-xl);
-  padding: var(--space-4);
-  border: 3px solid var(--truco-wood);
-  box-shadow: var(--shadow-md);
-  color: var(--truco-ivory);
-  min-height: calc(100dvh - 120px);
+  padding-bottom: var(--space-6);
 }
 
-.topBar {
+.sectionTitle {
+  font-family: var(--font-display);
+  font-size: 1.4rem;
+  font-weight: 700;
+  margin-bottom: var(--space-2);
+}
+
+.group {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  box-shadow: var(--shadow-sm);
+}
+
+.item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-}
-
-.targetSelector {
-  display: flex;
-  background-color: rgba(0, 0, 0, 0.3);
-  padding: 3px;
-  border-radius: var(--radius-full);
-  gap: 2px;
-}
-
-.targetBtn {
-  padding: 6px 12px;
-  border-radius: var(--radius-full);
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: var(--truco-ivory);
-  background: transparent;
-  transition: background-color 0.15s ease;
-}
-
-.targetBtnActive {
-  background-color: var(--truco-gold);
-  color: #1b1e3a;
-}
-
-.topActions {
-  display: flex;
-  gap: var(--space-2);
-}
-
-.iconBtn {
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-md);
-  background-color: rgba(0, 0, 0, 0.25);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--truco-ivory);
-  transition: transform 0.1s ease;
-}
-
-.iconBtn:active { transform: scale(0.92); }
-.iconBtn:disabled { opacity: 0.4; cursor: not-allowed; }
-
-/* Teams Board Grid */
-.teamsGrid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--space-3);
-  flex: 1;
-}
-
-.teamColumn {
-  background-color: rgba(0, 0, 0, 0.22);
-  border: 2px solid rgba(255, 255, 255, 0.12);
-  border-radius: var(--radius-lg);
-  padding: var(--space-3);
-  display: flex;
-  flex-direction: column;
   gap: var(--space-3);
 }
 
-.teamHeader {
+.itemInfo {
   display: flex;
   flex-direction: column;
-  align-items: center;
   gap: 2px;
 }
 
-.teamName {
+.itemLabel {
   font-family: var(--font-display);
-  font-size: 1.1rem;
-  font-weight: 700;
+  font-size: 1rem;
+  font-weight: 600;
 }
 
-.teamScoreBig {
-  font-family: var(--font-display);
-  font-size: 2.2rem;
-  font-weight: 700;
-  color: var(--truco-gold);
-  line-height: 1;
+.itemDesc {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
 }
 
-/* Matchsticks Area */
-.matchesBox {
-  flex: 1;
-  background-color: rgba(0, 0, 0, 0.28);
-  border-radius: var(--radius-md);
-  padding: var(--space-2);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  min-height: 160px;
-  overflow-y: auto;
-}
-
-.sectionLabel {
-  font-size: 0.65rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  color: var(--truco-gold);
-  opacity: 0.85;
-}
-
-.bundleGrid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.bundle {
-  width: 32px;
-  height: 32px;
-  border: 1px dashed rgba(245, 235, 208, 0.25);
-  border-radius: var(--radius-sm);
+/* Switch Toggle */
+.switch {
   position: relative;
+  display: inline-block;
+  width: 52px;
+  height: 28px;
+  flex-shrink: 0;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  inset: 0;
+  background-color: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  transition: 0.2s;
+  border-radius: var(--radius-full);
+}
+
+.slider:before {
+  position: absolute;
+  content: '';
+  height: 20px;
+  width: 20px;
+  left: 3px;
+  bottom: 3px;
+  background-color: var(--color-text-muted);
+  transition: 0.2s;
+  border-radius: 50%;
+}
+
+input:checked + .slider {
+  background-color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+input:checked + .slider:before {
+  transform: translateX(24px);
+  background-color: #ffffff;
+}
+
+/* Select Theme */
+.select {
+  background-color: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  font-family: var(--font-sans);
+  font-size: 0.9rem;
+  outline: none;
+}
+
+.dangerBtn {
+  width: 100%;
+  min-height: 46px;
+  border-radius: var(--radius-md);
+  background-color: rgba(255, 92, 122, 0.12);
+  border: 1px solid var(--color-error);
+  color: var(--color-error);
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  font-weight: 600;
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: var(--space-2);
 }
 
-.matchstick {
-  position: absolute;
-  background-color: var(--truco-ivory);
-  border-radius: 2px;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.3);
-}
+.dangerBtn:active { transform: scale(0.98); }
 
-.stick1 { width: 3px; height: 22px; left: 6px; top: 5px; }
-.stick2 { width: 3px; height: 22px; left: 12px; top: 5px; }
-.stick3 { width: 3px; height: 22px; left: 18px; top: 5px; }
-.stick4 { width: 3px; height: 22px; left: 24px; top: 5px; }
-.stick5 {
-  width: 30px;
-  height: 3px;
-  left: 1px;
-  top: 15px;
-  transform: rotate(35deg);
-}
-
-/* Score Buttons */
-.controlsStack {
+.aboutBox {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-}
-
-.quickRow {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
   gap: 4px;
 }
 
-.quickBtn {
-  min-height: 38px;
-  border-radius: var(--radius-sm);
-  background-color: rgba(255, 255, 255, 0.15);
+.version {
   font-family: var(--font-display);
-  font-size: 0.9rem;
   font-weight: 700;
-  color: var(--truco-ivory);
-  transition: background-color 0.1s ease;
+  color: var(--color-accent);
 }
 
-.quickBtn:active { background-color: var(--truco-gold); color: #1b1e3a; }
-
-.mainPlusBtn {
-  min-height: 48px;
-  border-radius: var(--radius-md);
-  background-color: var(--truco-gold);
-  color: #1b1e3a;
-  font-family: var(--font-display);
-  font-size: 1.25rem;
-  font-weight: 700;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-}
-
-.mainPlusBtn:active { transform: scale(0.97); }
-
-/* Celebration Overlay */
+/* Modal Confirm */
 .overlay {
-  position: absolute;
+  position: fixed;
   inset: 0;
-  background-color: rgba(14, 90, 58, 0.94);
-  backdrop-filter: blur(6px);
-  border-radius: var(--radius-xl);
+  background-color: rgba(15, 18, 38, 0.86);
+  backdrop-filter: blur(4px);
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--space-4);
+  padding: var(--space-4);
+  z-index: 50;
+}
+
+.modal {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
   padding: var(--space-6);
-  z-index: 30;
-}
-
-.modalTitle {
-  font-family: var(--font-display);
-  font-size: 1.8rem;
-  font-weight: 700;
-  color: var(--truco-gold);
-  text-align: center;
-}
-
-.modalSub {
-  font-size: 1.1rem;
-  text-align: center;
-}
-
-.primaryBtn {
   width: 100%;
-  max-width: 280px;
-  min-height: 48px;
+  max-width: 380px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  box-shadow: var(--shadow-md);
+}
+
+.modalActions {
+  display: flex;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+}
+
+.cancelBtn {
+  flex: 1;
+  min-height: 44px;
   border-radius: var(--radius-md);
-  background-color: var(--truco-gold);
-  color: #1b1e3a;
+  background-color: var(--color-surface-2);
+  border: 1px solid var(--color-border);
   font-family: var(--font-display);
-  font-size: 1rem;
-  font-weight: 700;
-  box-shadow: var(--shadow-sm);
+  font-weight: 600;
+}
+
+.confirmBtn {
+  flex: 1;
+  min-height: 44px;
+  border-radius: var(--radius-md);
+  background-color: var(--color-error);
+  color: #ffffff;
+  font-family: var(--font-display);
+  font-weight: 600;
 }
 `,
 
-  'src/features/truco/TrucoScreen.tsx': `import { useState, useEffect } from 'react';
-import { Undo2, RotateCcw, Trophy } from 'lucide-react';
+  'src/features/settings/SettingsScreen.tsx': `import { useState } from 'react';
+import { Trash2, Info } from 'lucide-react';
 import { t } from '@/i18n';
-import { useSettingsStore } from '@/features/settings/settingsStore';
-import {
-  createTrucoMatch,
-  addPoints,
-  undoTrucoMatch,
-  type TargetScore,
-  type TrucoMatchState,
-} from './trucoEngine';
-import { triggerHaptic } from '@/platform/haptics';
-import styles from './TrucoScreen.module.css';
+import { useSettingsStore, type ThemeMode } from './settingsStore';
+import styles from './SettingsScreen.module.css';
 
-export function TrucoScreen() {
-  const { trucoWinsUs, trucoWinsThem } = useSettingsStore();
-  const [match, setMatch] = useState<TrucoMatchState>(() => createTrucoMatch(30));
+export function SettingsScreen() {
+  const {
+    theme,
+    setTheme,
+    soundEnabled,
+    hapticsEnabled,
+    setSoundEnabled,
+    setHapticsEnabled,
+    resetAllData,
+  } = useSettingsStore();
 
-  const handleAdd = (team: 'us' | 'them', pts: number) => {
-    const next = addPoints(match, team, pts);
-    triggerHaptic(20);
+  const [showConfirm, setShowConfirm] = useState(false);
 
-    if (next.winner && !match.winner) {
-      if (next.winner === 'us') {
-        useSettingsStore.setState({ trucoWinsUs: trucoWinsUs + 1 });
-      } else {
-        useSettingsStore.setState({ trucoWinsThem: trucoWinsThem + 1 });
-      }
-    }
-    setMatch(next);
+  const handleResetConfirm = () => {
+    resetAllData();
+    setShowConfirm(false);
   };
-
-  const handleUndo = () => {
-    setMatch(undoTrucoMatch(match));
-    triggerHaptic(10);
-  };
-
-  const handleReset = (target: TargetScore = match.target) => {
-    setMatch(createTrucoMatch(target));
-    triggerHaptic(15);
-  };
-
-  const renderBundles = (score: number) => {
-    const bundlesCount = Math.ceil(score / 5);
-    const bundles = [];
-
-    for (let i = 0; i < bundlesCount; i++) {
-      const sticksInBundle = Math.min(5, score - i * 5);
-      bundles.push(
-        <div key={i} className={styles.bundle}>
-          {sticksInBundle >= 1 && <div className={\`\${styles.matchstick} \${styles.stick1}\`} />}
-          {sticksInBundle >= 2 && <div className={\`\${styles.matchstick} \${styles.stick2}\`} />}
-          {sticksInBundle >= 3 && <div className={\`\${styles.matchstick} \${styles.stick3}\`} />}
-          {sticksInBundle >= 4 && <div className={\`\${styles.matchstick} \${styles.stick4}\`} />}
-          {sticksInBundle === 5 && <div className={\`\${styles.matchstick} \${styles.stick5}\`} />}
-        </div>
-      );
-    }
-    return bundles;
-  };
-
-  // Split score into Malas (0-15) and Buenas (15-30) when target is 30
-  const is30 = match.target === 30;
-  const usMalas = is30 ? Math.min(15, match.usScore) : match.usScore;
-  const usBuenas = is30 ? Math.max(0, match.usScore - 15) : 0;
-  const themMalas = is30 ? Math.min(15, match.themScore) : match.themScore;
-  const themBuenas = is30 ? Math.max(0, match.themScore - 15) : 0;
 
   return (
     <div className={styles.screen}>
-      {/* Top Bar */}
-      <div className={styles.topBar}>
-        <div className={styles.targetSelector}>
-          <button
-            type="button"
-            className={\`\${styles.targetBtn} \${match.target === 15 ? styles.targetBtnActive : ''}\`}
-            onClick={() => handleReset(15)}
-          >
-            {t.truco.meta15}
-          </button>
-          <button
-            type="button"
-            className={\`\${styles.targetBtn} \${match.target === 30 ? styles.targetBtnActive : ''}\`}
-            onClick={() => handleReset(30)}
-          >
-            {t.truco.meta30}
-          </button>
+      <h2 className={styles.sectionTitle}>{t.settings.title}</h2>
+
+      {/* Preferences Group */}
+      <div className={styles.group}>
+        {/* Sound */}
+        <div className={styles.item}>
+          <div className={styles.itemInfo}>
+            <span className={styles.itemLabel}>{t.settings.sound}</span>
+            <span className={styles.itemDesc}>{t.settings.soundDesc}</span>
+          </div>
+          <label className={styles.switch}>
+            <input
+              type="checkbox"
+              checked={soundEnabled}
+              onChange={(e) => setSoundEnabled(e.target.checked)}
+            />
+            <span className={styles.slider} />
+          </label>
         </div>
 
-        <div className={styles.topActions}>
-          <button
-            type="button"
-            className={styles.iconBtn}
-            onClick={handleUndo}
-            disabled={match.history.length === 0}
-            aria-label={t.truco.undo}
-          >
-            <Undo2 size={18} />
-          </button>
-          <button
-            type="button"
-            className={styles.iconBtn}
-            onClick={() => handleReset(match.target)}
-            aria-label={t.truco.reset}
-          >
-            <RotateCcw size={18} />
-          </button>
-        </div>
-      </div>
-
-      {/* Teams Grid */}
-      <div className={styles.teamsGrid}>
-        {/* Nosotros */}
-        <div className={styles.teamColumn}>
-          <div className={styles.teamHeader}>
-            <span className={styles.teamName}>{t.truco.us}</span>
-            <span className={styles.teamScoreBig}>{match.usScore}</span>
+        {/* Haptics */}
+        <div className={styles.item}>
+          <div className={styles.itemInfo}>
+            <span className={styles.itemLabel}>{t.settings.haptics}</span>
+            <span className={styles.itemDesc}>{t.settings.hapticsDesc}</span>
           </div>
-
-          <div className={styles.matchesBox}>
-            <span className={styles.sectionLabel}>{t.truco.malas}</span>
-            <div className={styles.bundleGrid}>{renderBundles(usMalas)}</div>
-
-            {is30 && (
-              <>
-                <span className={styles.sectionLabel} style={{ marginTop: 8 }}>
-                  {t.truco.buenas}
-                </span>
-                <div className={styles.bundleGrid}>{renderBundles(usBuenas)}</div>
-              </>
-            )}
-          </div>
-
-          <div className={styles.controlsStack}>
-            <div className={styles.quickRow}>
-              <button type="button" className={styles.quickBtn} onClick={() => handleAdd('us', 2)}>
-                +2
-              </button>
-              <button type="button" className={styles.quickBtn} onClick={() => handleAdd('us', 3)}>
-                +3
-              </button>
-              <button type="button" className={styles.quickBtn} onClick={() => handleAdd('us', 4)}>
-                +4
-              </button>
-            </div>
-            <button
-              type="button"
-              className={styles.mainPlusBtn}
-              onClick={() => handleAdd('us', 1)}
-            >
-              +1
-            </button>
-          </div>
+          <label className={styles.switch}>
+            <input
+              type="checkbox"
+              checked={hapticsEnabled}
+              onChange={(e) => setHapticsEnabled(e.target.checked)}
+            />
+            <span className={styles.slider} />
+          </label>
         </div>
 
-        {/* Ellos */}
-        <div className={styles.teamColumn}>
-          <div className={styles.teamHeader}>
-            <span className={styles.teamName}>{t.truco.them}</span>
-            <span className={styles.teamScoreBig}>{match.themScore}</span>
+        {/* Theme Select */}
+        <div className={styles.item}>
+          <div className={styles.itemInfo}>
+            <span className={styles.itemLabel}>{t.settings.theme}</span>
           </div>
-
-          <div className={styles.matchesBox}>
-            <span className={styles.sectionLabel}>{t.truco.malas}</span>
-            <div className={styles.bundleGrid}>{renderBundles(themMalas)}</div>
-
-            {is30 && (
-              <>
-                <span className={styles.sectionLabel} style={{ marginTop: 8 }}>
-                  {t.truco.buenas}
-                </span>
-                <div className={styles.bundleGrid}>{renderBundles(themBuenas)}</div>
-              </>
-            )}
-          </div>
-
-          <div className={styles.controlsStack}>
-            <div className={styles.quickRow}>
-              <button type="button" className={styles.quickBtn} onClick={() => handleAdd('them', 2)}>
-                +2
-              </button>
-              <button type="button" className={styles.quickBtn} onClick={() => handleAdd('them', 3)}>
-                +3
-              </button>
-              <button type="button" className={styles.quickBtn} onClick={() => handleAdd('them', 4)}>
-                +4
-              </button>
-            </div>
-            <button
-              type="button"
-              className={styles.mainPlusBtn}
-              onClick={() => handleAdd('them', 1)}
-            >
-              +1
-            </button>
-          </div>
+          <select
+            className={styles.select}
+            value={theme}
+            onChange={(e) => setTheme(e.target.value as ThemeMode)}
+          >
+            <option value="dark">{t.settings.themeDark}</option>
+            <option value="light">{t.settings.themeLight}</option>
+            <option value="auto">{t.settings.themeAuto}</option>
+          </select>
         </div>
       </div>
 
-      {/* Winner Celebration Modal */}
-      {match.winner && (
+      {/* Data Management Group */}
+      <div className={styles.group}>
+        <div className={styles.itemInfo}>
+          <span className={styles.itemLabel}>{t.settings.data}</span>
+        </div>
+        <button
+          type="button"
+          className={styles.dangerBtn}
+          onClick={() => setShowConfirm(true)}
+        >
+          <Trash2 size={18} />
+          {t.settings.resetData}
+        </button>
+      </div>
+
+      {/* About Group */}
+      <div className={styles.group}>
+        <div className={styles.item}>
+          <div className={styles.aboutBox}>
+            <span className={styles.itemLabel}>{t.app.name}</span>
+            <span className={styles.version}>{t.app.version}</span>
+            <span className={styles.itemDesc}>{t.settings.credits}</span>
+          </div>
+          <Info size={24} color="var(--color-text-muted)" />
+        </div>
+      </div>
+
+      {/* Confirmation Modal */}
+      {showConfirm && (
         <div className={styles.overlay}>
-          <Trophy size={54} color="var(--truco-gold)" />
-          <h2 className={styles.modalTitle}>{t.truco.matchWon}</h2>
-          <p className={styles.modalSub}>
-            Ganó el equipo: <strong>{match.winner === 'us' ? t.truco.us : t.truco.them}</strong>
-          </p>
-          <button
-            type="button"
-            className={styles.primaryBtn}
-            onClick={() => handleReset(match.target)}
-          >
-            {t.truco.revancha}
-          </button>
+          <div className={styles.modal}>
+            <h3 style={{ fontFamily: 'var(--font-display)' }}>{t.settings.resetData}</h3>
+            <p style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>
+              {t.settings.resetConfirm}
+            </p>
+            <div className={styles.modalActions}>
+              <button
+                type="button"
+                className={styles.cancelBtn}
+                onClick={() => setShowConfirm(false)}
+              >
+                {t.settings.cancel}
+              </button>
+              <button
+                type="button"
+                className={styles.confirmBtn}
+                onClick={handleResetConfirm}
+              >
+                {t.settings.confirm}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
   );
+}
+`,
+
+  'src/features/settings/settingsStore.ts': `import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import { webStorage } from '@/platform';
+
+export type ThemeMode = 'dark' | 'light' | 'auto';
+
+interface SettingsState {
+  theme: ThemeMode;
+  soundEnabled: boolean;
+  hapticsEnabled: boolean;
+  wakeLockEnabled: boolean;
+  highScore: number;
+  gamesPlayed: number;
+  hasSavedGame: boolean;
+  trucoWinsUs: number;
+  trucoWinsThem: number;
+  setTheme: (theme: ThemeMode) => void;
+  toggleQuickTheme: () => void;
+  setSoundEnabled: (enabled: boolean) => void;
+  setHapticsEnabled: (enabled: boolean) => void;
+  resetAllData: () => void;
+}
+
+export const useSettingsStore = create<SettingsState>()(
+  persist(
+    (set, get) => ({
+      theme: 'dark',
+      soundEnabled: true,
+      hapticsEnabled: true,
+      wakeLockEnabled: true,
+      highScore: 0,
+      gamesPlayed: 0,
+      hasSavedGame: false,
+      trucoWinsUs: 0,
+      trucoWinsThem: 0,
+      setTheme: (theme) => set({ theme }),
+      toggleQuickTheme: () => {
+        const current = get().theme;
+        set({ theme: current === 'light' ? 'dark' : 'light' });
+      },
+      setSoundEnabled: (soundEnabled) => set({ soundEnabled }),
+      setHapticsEnabled: (hapticsEnabled) => set({ hapticsEnabled }),
+      resetAllData: () =>
+        set({
+          highScore: 0,
+          gamesPlayed: 0,
+          hasSavedGame: false,
+          trucoWinsUs: 0,
+          trucoWinsThem: 0,
+        }),
+    }),
+    {
+      name: 'trucoblock-settings',
+      storage: createJSONStorage(() => webStorage),
+    }
+  )
+);
+
+export function applyThemeToDOM(theme: ThemeMode): void {
+  const root = document.documentElement;
+  if (theme === 'auto') {
+    const prefersLight = window.matchMedia('(prefers-color-scheme: light)').matches;
+    root.setAttribute('data-theme', prefersLight ? 'light' : 'dark');
+  } else {
+    root.setAttribute('data-theme', theme);
+  }
 }
 `,
 
@@ -661,25 +514,8 @@ import { AppShell } from '@/components/AppShell';
 import { HomeScreen } from '@/features/home/HomeScreen';
 import { GameScreen } from '@/features/game/GameScreen';
 import { TrucoScreen } from '@/features/truco/TrucoScreen';
+import { SettingsScreen } from '@/features/settings/SettingsScreen';
 import { useSettingsStore, applyThemeToDOM } from '@/features/settings/settingsStore';
-import { t } from '@/i18n';
-
-function PlaceholderView({ title, desc }: { title: string; desc: string }) {
-  return (
-    <section
-      style={{
-        backgroundColor: 'var(--color-surface)',
-        border: '1px solid var(--color-border)',
-        borderRadius: 'var(--radius-xl)',
-        padding: 'var(--space-6)',
-        marginTop: 'var(--space-4)',
-      }}
-    >
-      <h2 style={{ marginBottom: 'var(--space-2)' }}>{title}</h2>
-      <p style={{ color: 'var(--color-text-muted)' }}>{desc}</p>
-    </section>
-  );
-}
 
 export function App() {
   const theme = useSettingsStore((state) => state.theme);
@@ -695,15 +531,7 @@ export function App() {
           <Route path="/" element={<HomeScreen />} />
           <Route path="/game" element={<GameScreen />} />
           <Route path="/truco" element={<TrucoScreen />} />
-          <Route
-            path="/settings"
-            element={
-              <PlaceholderView
-                title={t.placeholders.settingsTitle}
-                desc={t.placeholders.settingsDesc}
-              />
-            }
-          />
+          <Route path="/settings" element={<SettingsScreen />} />
         </Routes>
       </AppShell>
     </HashRouter>
@@ -719,7 +547,7 @@ export function App() {
 - [x] Fase 3: UI del juego: tablero, bandeja, drag & drop, vista previa
 - [x] Fase 4: Pulido del juego: animaciones, combos, sonido, vibración, pausa, persistencia
 - [x] Fase 5: Truco: lógica + tests + UI + palitos + historial
-- [ ] Fase 6: Ajustes, estadísticas, compartir, i18n, accesibilidad
+- [x] Fase 6: Ajustes, estadísticas, compartir, i18n, accesibilidad
 - [ ] Fase 7: PWA: manifest, service worker, íconos, offline, instalación
 - [ ] Fase 8: QA y deploy
 - [ ] Fase 9: (Futuro) iOS con Capacitor
@@ -732,4 +560,4 @@ for (const [relativePath, content] of Object.entries(files)) {
   console.log('[OK] Creado/Actualizado:', relativePath);
 }
 
-console.log('\n¡Fase 5 lista! Ejecutá npm run test para verificar los tests.');
+console.log('\n¡Fase 6 lista! Ejecutá el commit.');
