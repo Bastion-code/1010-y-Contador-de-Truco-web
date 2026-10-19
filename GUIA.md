@@ -2,7 +2,7 @@
 
 - [x] Fase 0: Setup inicial
 - [x] Fase 1: Design system (tokens, temas), layout, navegación inferior e Inicio
-- [ ] Fase 2: Lógica del juego (funciones puras + tests)
+- [x] Fase 2: Lógica del juego (funciones puras + tests)
 - [ ] Fase 3: UI del juego: tablero, bandeja, drag & drop, vista previa
 - [ ] Fase 4: Pulido del juego: animaciones, combos, sonido, vibración, pausa, persistencia
 - [ ] Fase 5: Truco: lógica + tests + UI + palitos + historial

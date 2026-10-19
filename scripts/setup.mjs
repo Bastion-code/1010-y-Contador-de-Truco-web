@@ -1,19 +1,7 @@
 import { mkdirSync, existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-const dirs = [
-  'public/icons',
-  'scripts',
-  'src/app',
-  'src/features/game',
-  'src/features/truco',
-  'src/features/home',
-  'src/features/settings',
-  'src/components',
-  'src/platform',
-  'src/i18n',
-  'src/styles',
-];
+const dirs = ['src/features/game'];
 
 for (const dir of dirs) {
   const fullPath = join(process.cwd(), dir);
@@ -23,846 +11,713 @@ for (const dir of dirs) {
 }
 
 const files = {
-  'src/styles/tokens.css': `:root,
-[data-theme='dark'] {
-  /* Base Dark Theme (Default) */
-  --color-bg: #0f1226;
-  --color-surface: #1a1f3d;
-  --color-surface-2: #252b52;
-  --color-border: #323a6b;
-  --color-text: #f2f4ff;
-  --color-text-muted: #9aa3cf;
+  'src/features/game/types.ts': `export type BlockColor =
+  | 'red'
+  | 'orange'
+  | 'yellow'
+  | 'green'
+  | 'cyan'
+  | 'blue'
+  | 'purple';
 
-  /* Accents & Semantic */
-  --color-accent: #7c5cff;
-  --color-accent-hover: #6946ff;
-  --color-accent-2: #22d3ee;
-  --color-success: #3ddc97;
-  --color-warning: #ffd93d;
-  --color-error: #ff5c7a;
+export type CellValue = BlockColor | null;
 
-  /* Shadows */
-  --shadow-sm: 0 4px 12px rgba(5, 7, 20, 0.35);
-  --shadow-md: 0 10px 25px rgba(5, 7, 20, 0.5);
+export type Grid = CellValue[][];
+
+export type PieceMatrix = readonly (readonly number[])[];
+
+export interface PieceDefinition {
+  id: string;
+  matrix: PieceMatrix;
 }
 
-[data-theme='light'] {
-  /* Light Theme */
-  --color-bg: #f5f6ff;
-  --color-surface: #ffffff;
-  --color-surface-2: #e9ecff;
-  --color-border: #d3d8f5;
-  --color-text: #1b1e3a;
-  --color-text-muted: #5b6191;
-
-  --color-accent: #7c5cff;
-  --color-accent-hover: #6946ff;
-  --color-accent-2: #22d3ee;
-  --color-success: #3ddc97;
-  --color-warning: #ffd93d;
-  --color-error: #ff5c7a;
-
-  --shadow-sm: 0 4px 12px rgba(27, 30, 58, 0.08);
-  --shadow-md: 0 10px 25px rgba(27, 30, 58, 0.14);
+export interface PieceInstance {
+  uid: string;
+  defId: string;
+  matrix: PieceMatrix;
+  color: BlockColor;
+  cellCount: number;
 }
 
-:root {
-  /* Block Puzzle Palette (7 colors) */
-  --block-red: #ff5c7a;
-  --block-orange: #ff9f43;
-  --block-yellow: #ffd93d;
-  --block-green: #3ddc97;
-  --block-cyan: #4cc9f0;
-  --block-blue: #4d7cff;
-  --block-purple: #b388ff;
-
-  /* Truco Table Identity */
-  --truco-felt-start: #0e5a3a;
-  --truco-felt-end: #137a4d;
-  --truco-wood: #8b5a2b;
-  --truco-ivory: #f5ebd0;
-  --truco-gold: #e6b422;
-  --truco-us: #3ddc97;
-  --truco-them: #ff5c7a;
-
-  /* Typography */
-  --font-display: 'Fredoka', system-ui, -apple-system, sans-serif;
-  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
-
-  /* Spacing Scale */
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-5: 20px;
-  --space-6: 24px;
-  --space-8: 32px;
-
-  /* Border Radius (Playful 16-24px) */
-  --radius-sm: 10px;
-  --radius-md: 16px;
-  --radius-lg: 20px;
-  --radius-xl: 24px;
-  --radius-full: 9999px;
-
-  /* Layout */
-  --app-max-width: 480px;
-  --nav-height: 68px;
+export interface MoveResult {
+  grid: Grid;
+  clearedRows: number[];
+  clearedCols: number[];
+  linesCleared: number;
+  pointsEarned: number;
+  newCombo: number;
+  isFullClear: boolean;
 }
 `,
 
-  'src/styles/global.css': `*,
-*::before,
-*::after {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-  -webkit-tap-highlight-color: transparent;
-}
+  'src/features/game/pieces.ts': `import type { BlockColor, PieceDefinition, PieceMatrix } from './types';
 
-html,
-body {
-  height: 100%;
-  min-height: 100dvh;
-  background-color: var(--color-bg);
-  color: var(--color-text);
-  font-family: var(--font-sans);
-  -webkit-font-smoothing: antialiased;
-  transition: background-color 0.2s ease, color 0.2s ease;
-  overflow-x: hidden;
-}
+export const BLOCK_COLORS: readonly BlockColor[] = [
+  'red',
+  'orange',
+  'yellow',
+  'green',
+  'cyan',
+  'blue',
+  'purple',
+];
 
-#root {
-  min-height: 100dvh;
-  display: flex;
-  justify-content: center;
-}
-
-h1,
-h2,
-h3,
-h4 {
-  font-family: var(--font-display);
-  letter-spacing: 0.01em;
-}
-
-button {
-  font-family: inherit;
-  cursor: pointer;
-  border: none;
-  background: none;
-  color: inherit;
-}
-
-:focus-visible {
-  outline: 3px solid var(--color-accent-2);
-  outline-offset: 2px;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
-  }
-}
-`,
-
-  'src/i18n/es-AR.ts': `import { APP_NAME } from '@/app/config';
-
-export const esAR = {
-  app: {
-    name: APP_NAME,
-    subtitle: 'Bloques + Truco Argentino',
-  },
-  nav: {
-    home: 'Inicio',
-    game: 'Juego',
-    truco: 'Truco',
-    settings: 'Ajustes',
-    ariaLabel: 'Navegación principal',
-  },
-  home: {
-    toggleThemeAria: 'Cambiar tema claro u oscuro',
-    gameCard: {
-      badge: 'PUZZLE 8x8',
-      title: 'Bloques',
-      description: 'Ubicá piezas, limpiá filas y columnas y armá combos.',
-      highScoreLabel: 'Récord',
-      playNew: 'Jugar ahora',
-      continueGame: 'Continuar partida',
-    },
-    trucoCard: {
-      badge: 'ANOTADOR',
-      title: 'Truco Argentino',
-      description: 'Paño tradicional con fósforos, buenas y malas.',
-      statusLabel: 'Estado',
-      noActiveMatch: 'Mesa lista (a 30 pts)',
-      openTable: 'Abrir anotador',
-    },
-    stats: {
-      title: 'Tus Estadísticas',
-      bestScore: 'Mejor Puntaje',
-      gamesPlayed: 'Partidas Bloques',
-      trucoWinsUs: 'Victorias Nosotros',
-      trucoWinsThem: 'Victorias Ellos',
-    },
-  },
-  placeholders: {
-    gameTitle: 'Módulo de Juego (Fase 2 y 3)',
-    gameDesc: 'Acá vamos a construir el tablero 8x8 con drag & drop.',
-    trucoTitle: 'Anotador de Truco (Fase 5)',
-    trucoDesc: 'Acá irá la mesa con paño verde y fósforos.',
-    settingsTitle: 'Ajustes (Fase 6)',
-    settingsDesc: 'Configuración de sonido, vibración, tema y datos.',
-  },
-} as const;
-
-export type Dictionary = typeof esAR;
-`,
-
-  'src/features/settings/settingsStore.ts': `import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
-import { webStorage } from '@/platform';
-
-export type ThemeMode = 'dark' | 'light' | 'auto';
-
-interface SettingsState {
-  theme: ThemeMode;
-  soundEnabled: boolean;
-  hapticsEnabled: boolean;
-  wakeLockEnabled: boolean;
-  highScore: number;
-  gamesPlayed: number;
-  hasSavedGame: boolean;
-  trucoWinsUs: number;
-  trucoWinsThem: number;
-  setTheme: (theme: ThemeMode) => void;
-  toggleQuickTheme: () => void;
-}
-
-export const useSettingsStore = create<SettingsState>()(
-  persist(
-    (set, get) => ({
-      theme: 'dark',
-      soundEnabled: true,
-      hapticsEnabled: true,
-      wakeLockEnabled: true,
-      highScore: 0,
-      gamesPlayed: 0,
-      hasSavedGame: false,
-      trucoWinsUs: 0,
-      trucoWinsThem: 0,
-      setTheme: (theme) => set({ theme }),
-      toggleQuickTheme: () => {
-        const current = get().theme;
-        set({ theme: current === 'light' ? 'dark' : 'light' });
-      },
-    }),
-    {
-      name: 'trucoblock-settings',
-      storage: createJSONStorage(() => webStorage),
+export function countMatrixCells(matrix: PieceMatrix): number {
+  let count = 0;
+  for (const row of matrix) {
+    for (const cell of row) {
+      if (cell === 1) count++;
     }
-  )
-);
-
-export function applyThemeToDOM(theme: ThemeMode): void {
-  const root = document.documentElement;
-  if (theme === 'auto') {
-    const prefersLight = window.matchMedia('(prefers-color-scheme: light)').matches;
-    root.setAttribute('data-theme', prefersLight ? 'light' : 'dark');
-  } else {
-    root.setAttribute('data-theme', theme);
   }
+  return count;
 }
+
+export const PIECE_CATALOG: readonly PieceDefinition[] = [
+  // 1x1 Dot
+  { id: 'dot_1x1', matrix: [[1]] },
+
+  // Horizontal Lines (1x2 to 1x5)
+  { id: 'line_h2', matrix: [[1, 1]] },
+  { id: 'line_h3', matrix: [[1, 1, 1]] },
+  { id: 'line_h4', matrix: [[1, 1, 1, 1]] },
+  { id: 'line_h5', matrix: [[1, 1, 1, 1, 1]] },
+
+  // Vertical Lines (2x1 to 5x1)
+  { id: 'line_v2', matrix: [[1], [1]] },
+  { id: 'line_v3', matrix: [[1], [1], [1]] },
+  { id: 'line_v4', matrix: [[1], [1], [1], [1]] },
+  { id: 'line_v5', matrix: [[1], [1], [1], [1], [1]] },
+
+  // Squares (2x2 & 3x3)
+  {
+    id: 'sq_2x2',
+    matrix: [
+      [1, 1],
+      [1, 1],
+    ],
+  },
+  {
+    id: 'sq_3x3',
+    matrix: [
+      [1, 1, 1],
+      [1, 1, 1],
+      [1, 1, 1],
+    ],
+  },
+
+  // Rectangles (2x3 & 3x2)
+  {
+    id: 'rect_2x3',
+    matrix: [
+      [1, 1, 1],
+      [1, 1, 1],
+    ],
+  },
+  {
+    id: 'rect_3x2',
+    matrix: [
+      [1, 1],
+      [1, 1],
+      [1, 1],
+    ],
+  },
+
+  // Small 2x2 L / J Corners
+  {
+    id: 'corner_tl',
+    matrix: [
+      [1, 1],
+      [1, 0],
+    ],
+  },
+  {
+    id: 'corner_tr',
+    matrix: [
+      [1, 1],
+      [0, 1],
+    ],
+  },
+  {
+    id: 'corner_bl',
+    matrix: [
+      [1, 0],
+      [1, 1],
+    ],
+  },
+  {
+    id: 'corner_br',
+    matrix: [
+      [0, 1],
+      [1, 1],
+    ],
+  },
+
+  // Standard 3x2 L & J
+  {
+    id: 'l_right',
+    matrix: [
+      [1, 0],
+      [1, 0],
+      [1, 1],
+    ],
+  },
+  {
+    id: 'j_left',
+    matrix: [
+      [0, 1],
+      [0, 1],
+      [1, 1],
+    ],
+  },
+  {
+    id: 'l_up',
+    matrix: [
+      [1, 1, 1],
+      [1, 0, 0],
+    ],
+  },
+  {
+    id: 'j_up',
+    matrix: [
+      [1, 1, 1],
+      [0, 0, 1],
+    ],
+  },
+
+  // Big 3x3 L / J Corners
+  {
+    id: 'big_corner_tl',
+    matrix: [
+      [1, 1, 1],
+      [1, 0, 0],
+      [1, 0, 0],
+    ],
+  },
+  {
+    id: 'big_corner_tr',
+    matrix: [
+      [1, 1, 1],
+      [0, 0, 1],
+      [0, 0, 1],
+    ],
+  },
+  {
+    id: 'big_corner_bl',
+    matrix: [
+      [1, 0, 0],
+      [1, 0, 0],
+      [1, 1, 1],
+    ],
+  },
+  {
+    id: 'big_corner_br',
+    matrix: [
+      [0, 0, 1],
+      [0, 0, 1],
+      [1, 1, 1],
+    ],
+  },
+
+  // T Shapes
+  {
+    id: 't_down',
+    matrix: [
+      [1, 1, 1],
+      [0, 1, 0],
+    ],
+  },
+  {
+    id: 't_up',
+    matrix: [
+      [0, 1, 0],
+      [1, 1, 1],
+    ],
+  },
+  {
+    id: 't_right',
+    matrix: [
+      [1, 0],
+      [1, 1],
+      [1, 0],
+    ],
+  },
+  {
+    id: 't_left',
+    matrix: [
+      [0, 1],
+      [1, 1],
+      [0, 1],
+    ],
+  },
+
+  // S & Z Shapes
+  {
+    id: 's_h',
+    matrix: [
+      [0, 1, 1],
+      [1, 1, 0],
+    ],
+  },
+  {
+    id: 'z_h',
+    matrix: [
+      [1, 1, 0],
+      [0, 1, 1],
+    ],
+  },
+  {
+    id: 's_v',
+    matrix: [
+      [1, 0],
+      [1, 1],
+      [0, 1],
+    ],
+  },
+  {
+    id: 'z_v',
+    matrix: [
+      [0, 1],
+      [1, 1],
+      [1, 0],
+    ],
+  },
+];
 `,
 
-  'src/components/AppShell.module.css': `.shell {
-  width: 100%;
-  max-width: var(--app-max-width);
-  min-height: 100dvh;
-  display: flex;
-  flex-direction: column;
-  background-color: var(--color-bg);
-  position: relative;
+  'src/features/game/engine.ts': `import { BLOCK_COLORS, PIECE_CATALOG, countMatrixCells } from './pieces';
+import type {
+  BlockColor,
+  Grid,
+  MoveResult,
+  PieceDefinition,
+  PieceInstance,
+  PieceMatrix,
+} from './types';
+
+export const GRID_SIZE = 8;
+export const FULL_CLEAR_BONUS = 300;
+export const LINE_BASE_POINTS = 10;
+
+export function createEmptyGrid(): Grid {
+  return Array.from({ length: GRID_SIZE }, () =>
+    Array.from({ length: GRID_SIZE }, () => null)
+  );
 }
 
-.main {
-  flex: 1;
-  padding: var(--space-4);
-  padding-bottom: calc(var(--nav-height) + env(safe-area-inset-bottom, 0px) + var(--space-6));
-  overflow-y: auto;
+export function cloneGrid(grid: Grid): Grid {
+  return grid.map((row) => [...row]);
 }
 
-.bottomNav {
-  position: fixed;
-  bottom: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 100%;
-  max-width: var(--app-max-width);
-  height: calc(var(--nav-height) + env(safe-area-inset-bottom, 0px));
-  padding-bottom: env(safe-area-inset-bottom, 0px);
-  background-color: var(--color-surface);
-  border-top: 1px solid var(--color-border);
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  z-index: 50;
-  box-shadow: var(--shadow-md);
+export function isGridEmpty(grid: Grid): boolean {
+  for (let r = 0; r < GRID_SIZE; r++) {
+    for (let c = 0; c < GRID_SIZE; c++) {
+      if (grid[r][c] !== null) return false;
+    }
+  }
+  return true;
 }
 
-.navItem {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  min-height: 44px;
-  min-width: 44px;
-  color: var(--color-text-muted);
-  text-decoration: none;
-  font-size: 0.75rem;
-  font-weight: 600;
-  transition: color 0.15s ease, transform 0.15s ease;
+export function canPlacePiece(
+  grid: Grid,
+  matrix: PieceMatrix,
+  startRow: number,
+  startCol: number
+): boolean {
+  const rows = matrix.length;
+  const cols = matrix[0]?.length ?? 0;
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if (matrix[r][c] !== 1) continue;
+      const targetRow = startRow + r;
+      const targetCol = startCol + c;
+
+      if (
+        targetRow < 0 ||
+        targetRow >= GRID_SIZE ||
+        targetCol < 0 ||
+        targetCol >= GRID_SIZE
+      ) {
+        return false;
+      }
+
+      if (grid[targetRow][targetCol] !== null) {
+        return false;
+      }
+    }
+  }
+  return true;
 }
 
-.navItem:active {
-  transform: scale(0.95);
+export function canPieceFitAnywhere(grid: Grid, matrix: PieceMatrix): boolean {
+  for (let r = 0; r < GRID_SIZE; r++) {
+    for (let c = 0; c < GRID_SIZE; c++) {
+      if (canPlacePiece(grid, matrix, r, c)) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
-.navItemActive {
-  color: var(--color-accent);
+export function getPreviewClearLines(
+  grid: Grid,
+  matrix: PieceMatrix,
+  startRow: number,
+  startCol: number
+): { rows: number[]; cols: number[] } {
+  if (!canPlacePiece(grid, matrix, startRow, startCol)) {
+    return { rows: [], cols: [] };
+  }
+
+  const temp = cloneGrid(grid);
+  for (let r = 0; r < matrix.length; r++) {
+    for (let c = 0; c < matrix[r].length; c++) {
+      if (matrix[r][c] === 1) {
+        temp[startRow + r][startCol + c] = 'red';
+      }
+    }
+  }
+
+  const rows: number[] = [];
+  const cols: number[] = [];
+
+  for (let r = 0; r < GRID_SIZE; r++) {
+    if (temp[r].every((cell) => cell !== null)) {
+      rows.push(r);
+    }
+  }
+
+  for (let c = 0; c < GRID_SIZE; c++) {
+    let full = true;
+    for (let r = 0; r < GRID_SIZE; r++) {
+      if (temp[r][c] === null) {
+        full = false;
+        break;
+      }
+    }
+    if (full) cols.push(c);
+  }
+
+  return { rows, cols };
 }
 
-.indicator {
-  width: 20px;
-  height: 3px;
-  border-radius: var(--radius-full);
-  background-color: transparent;
-  margin-bottom: 2px;
-  transition: background-color 0.15s ease;
+export function calculateMoveScore(
+  cellsPlaced: number,
+  linesCleared: number,
+  combo: number,
+  isFullClear: boolean
+): number {
+  const lineBonus =
+    linesCleared > 0 ? LINE_BASE_POINTS * linesCleared * linesCleared * combo : 0;
+  const fullClearBonus = isFullClear && linesCleared > 0 ? FULL_CLEAR_BONUS : 0;
+  return cellsPlaced + lineBonus + fullClearBonus;
 }
 
-.navItemActive .indicator {
-  background-color: var(--color-accent);
+export function placePieceAndClear(
+  grid: Grid,
+  piece: { matrix: PieceMatrix; color: BlockColor },
+  startRow: number,
+  startCol: number,
+  currentCombo: number
+): MoveResult {
+  if (!canPlacePiece(grid, piece.matrix, startRow, startCol)) {
+    throw new Error('Invalid piece placement');
+  }
+
+  const nextGrid = cloneGrid(grid);
+  let cellsPlaced = 0;
+
+  for (let r = 0; r < piece.matrix.length; r++) {
+    for (let c = 0; c < piece.matrix[r].length; c++) {
+      if (piece.matrix[r][c] === 1) {
+        nextGrid[startRow + r][startCol + c] = piece.color;
+        cellsPlaced++;
+      }
+    }
+  }
+
+  const clearedRows: number[] = [];
+  const clearedCols: number[] = [];
+
+  for (let r = 0; r < GRID_SIZE; r++) {
+    if (nextGrid[r].every((cell) => cell !== null)) {
+      clearedRows.push(r);
+    }
+  }
+
+  for (let c = 0; c < GRID_SIZE; c++) {
+    let fullCol = true;
+    for (let r = 0; r < GRID_SIZE; r++) {
+      if (nextGrid[r][c] === null) {
+        fullCol = false;
+        break;
+      }
+    }
+    if (fullCol) {
+      clearedCols.push(c);
+    }
+  }
+
+  for (const r of clearedRows) {
+    for (let c = 0; c < GRID_SIZE; c++) {
+      nextGrid[r][c] = null;
+    }
+  }
+
+  for (const c of clearedCols) {
+    for (let r = 0; r < GRID_SIZE; r++) {
+      nextGrid[r][c] = null;
+    }
+  }
+
+  const linesCleared = clearedRows.length + clearedCols.length;
+  const newCombo = linesCleared > 0 ? currentCombo + 1 : 0;
+  const fullClear = linesCleared > 0 && isGridEmpty(nextGrid);
+  const pointsEarned = calculateMoveScore(
+    cellsPlaced,
+    linesCleared,
+    newCombo,
+    fullClear
+  );
+
+  return {
+    grid: nextGrid,
+    clearedRows,
+    clearedCols,
+    linesCleared,
+    pointsEarned,
+    newCombo,
+    isFullClear: fullClear,
+  };
 }
-`,
 
-  'src/components/AppShell.tsx': `import type { ReactNode } from 'react';
-import { NavLink } from 'react-router-dom';
-import { Home, Grid, Club, Settings } from 'lucide-react';
-import { t } from '@/i18n';
-import styles from './AppShell.module.css';
+export function isGameOver(
+  grid: Grid,
+  tray: readonly (PieceInstance | null)[]
+): boolean {
+  const remaining = tray.filter((p): p is PieceInstance => p !== null);
+  if (remaining.length === 0) return false;
 
-interface AppShellProps {
-  children: ReactNode;
+  return !remaining.some((piece) => canPieceFitAnywhere(grid, piece.matrix));
 }
 
-export function AppShell({ children }: AppShellProps) {
-  const navItems = [
-    { to: '/', label: t.nav.home, icon: Home, end: true },
-    { to: '/game', label: t.nav.game, icon: Grid },
-    { to: '/truco', label: t.nav.truco, icon: Club },
-    { to: '/settings', label: t.nav.settings, icon: Settings },
+function createPieceInstance(
+  def: PieceDefinition,
+  randomFn: () => number,
+  indexSuffix: number
+): PieceInstance {
+  const colorIndex = Math.floor(randomFn() * BLOCK_COLORS.length);
+  const color = BLOCK_COLORS[colorIndex] ?? 'purple';
+  const uid = \`\${def.id}_\${Math.floor(randomFn() * 1e6)}_\${indexSuffix}\`;
+
+  return {
+    uid,
+    defId: def.id,
+    matrix: def.matrix,
+    color,
+    cellCount: countMatrixCells(def.matrix),
+  };
+}
+
+/**
+ * Generates 3 pieces and guarantees that at least 1 of them fits on the current
+ * grid if any piece in PIECE_CATALOG can fit.
+ */
+export function generateSmartTray(
+  grid: Grid,
+  randomFn: () => number = Math.random
+): [PieceInstance, PieceInstance, PieceInstance] {
+  const pickRandomDef = (): PieceDefinition => {
+    const idx = Math.floor(randomFn() * PIECE_CATALOG.length);
+    return PIECE_CATALOG[idx] ?? PIECE_CATALOG[0];
+  };
+
+  const defs: [PieceDefinition, PieceDefinition, PieceDefinition] = [
+    pickRandomDef(),
+    pickRandomDef(),
+    pickRandomDef(),
   ];
 
-  return (
-    <div className={styles.shell}>
-      <main className={styles.main}>{children}</main>
+  const anyFits = defs.some((d) => canPieceFitAnywhere(grid, d.matrix));
 
-      <nav className={styles.bottomNav} aria-label={t.nav.ariaLabel}>
-        {navItems.map(({ to, label, icon: Icon, end }) => (
-          <NavLink
-            key={to}
-            to={to}
-            end={end}
-            className={({ isActive }) =>
-              isActive ? \`\${styles.navItem} \${styles.navItemActive}\` : styles.navItem
-            }
-          >
-            <span className={styles.indicator} />
-            <Icon size={22} strokeWidth={2.2} aria-hidden="true" />
-            <span>{label}</span>
-          </NavLink>
-        ))}
-      </nav>
-    </div>
-  );
+  if (!anyFits) {
+    const fittingCatalog = PIECE_CATALOG.filter((d) =>
+      canPieceFitAnywhere(grid, d.matrix)
+    );
+    if (fittingCatalog.length > 0) {
+      const replaceSlot = Math.floor(randomFn() * 3) as 0 | 1 | 2;
+      const fitDef =
+        fittingCatalog[Math.floor(randomFn() * fittingCatalog.length)] ??
+        fittingCatalog[0];
+      defs[replaceSlot] = fitDef;
+    }
+  }
+
+  return [
+    createPieceInstance(defs[0], randomFn, 0),
+    createPieceInstance(defs[1], randomFn, 1),
+    createPieceInstance(defs[2], randomFn, 2),
+  ];
 }
 `,
 
-  'src/features/home/HomeScreen.module.css': `.container {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-5);
-}
+  'src/features/game/engine.test.ts': `import { describe, it, expect } from 'vitest';
+import {
+  GRID_SIZE,
+  createEmptyGrid,
+  canPlacePiece,
+  placePieceAndClear,
+  getPreviewClearLines,
+  generateSmartTray,
+  isGameOver,
+} from './engine';
+import { PIECE_CATALOG } from './pieces';
+import type { PieceInstance } from './types';
 
-.header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding-top: var(--space-2);
-}
+describe('Block Puzzle Pure Engine', () => {
+  it('creates an 8x8 empty grid', () => {
+    const grid = createEmptyGrid();
+    expect(grid.length).toBe(GRID_SIZE);
+    expect(grid.every((row) => row.length === GRID_SIZE)).toBe(true);
+    expect(grid.flat().every((cell) => cell === null)).toBe(true);
+  });
 
-.brand {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-}
+  it('validates piece bounds and cell collisions', () => {
+    const grid = createEmptyGrid();
+    const sq2x2 = [
+      [1, 1],
+      [1, 1],
+    ];
 
-.logoBox {
-  width: 48px;
-  height: 48px;
-  border-radius: var(--radius-md);
-  background: linear-gradient(135deg, var(--color-accent), var(--color-accent-2));
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: var(--shadow-sm);
-}
+    expect(canPlacePiece(grid, sq2x2, 0, 0)).toBe(true);
+    expect(canPlacePiece(grid, sq2x2, 6, 6)).toBe(true);
+    // Out of bounds at bottom-right edge
+    expect(canPlacePiece(grid, sq2x2, 7, 7)).toBe(false);
 
-.title {
-  font-size: 1.65rem;
-  line-height: 1.1;
-  color: var(--color-text);
-}
+    // Collision check
+    grid[0][1] = 'blue';
+    expect(canPlacePiece(grid, sq2x2, 0, 0)).toBe(false);
+  });
 
-.subtitle {
-  font-size: 0.85rem;
-  color: var(--color-text-muted);
-}
+  it('clears a full row and column simultaneously and calculates quadratic score', () => {
+    const grid = createEmptyGrid();
 
-.themeBtn {
-  width: 44px;
-  height: 44px;
-  border-radius: var(--radius-md);
-  background-color: var(--color-surface);
-  border: 1px solid var(--color-border);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--color-text);
-  box-shadow: var(--shadow-sm);
-}
+    // Fill row 0 and col 0 except (0,0)
+    for (let i = 1; i < GRID_SIZE; i++) {
+      grid[0][i] = 'red';
+      grid[i][0] = 'green';
+    }
+    // Add one extra block at (4,4) so it is NOT a full clear
+    grid[4][4] = 'yellow';
 
-.cardsGrid {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-}
+    const preview = getPreviewClearLines(grid, [[1]], 0, 0);
+    expect(preview.rows).toEqual([0]);
+    expect(preview.cols).toEqual([0]);
 
-.card {
-  border-radius: var(--radius-xl);
-  padding: var(--space-5);
-  background-color: var(--color-surface);
-  border: 2px solid var(--color-border);
-  box-shadow: var(--shadow-md);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-  position: relative;
-  overflow: hidden;
-}
+    // Place 1x1 dot at (0,0) with currentCombo = 0 -> newCombo = 1
+    // C = 1, L = 2 (1 row + 1 col), K = 1 => 1 + (10 * 2^2) * 1 = 41
+    const result = placePieceAndClear(
+      grid,
+      { matrix: [[1]], color: 'cyan' },
+      0,
+      0,
+      0
+    );
 
-.cardGame {
-  border-color: var(--color-accent);
-  background: linear-gradient(160deg, var(--color-surface) 60%, rgba(124, 92, 255, 0.15) 100%);
-}
+    expect(result.clearedRows).toEqual([0]);
+    expect(result.clearedCols).toEqual([0]);
+    expect(result.linesCleared).toBe(2);
+    expect(result.newCombo).toBe(1);
+    expect(result.isFullClear).toBe(false);
+    expect(result.pointsEarned).toBe(41);
+    expect(result.grid[0].every((c) => c === null)).toBe(true);
+  });
 
-.cardTruco {
-  border-color: var(--truco-felt-end);
-  background: linear-gradient(160deg, var(--color-surface) 55%, rgba(19, 122, 77, 0.22) 100%);
-}
+  it('awards consecutive combo multiplier and +300 Full Clear bonus', () => {
+    const grid = createEmptyGrid();
+    // Fill row 3 except last 2 cells
+    for (let c = 0; c < GRID_SIZE - 2; c++) {
+      grid[3][c] = 'purple';
+    }
 
-.cardHeader {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-}
+    // Place a 1x2 horizontal line at (3, 6) with previous combo = 2 (so newCombo = 3)
+    // C = 2, L = 1, K = 3 => 2 + (10 * 1^2 * 3) + 300 (full clear) = 332
+    const result = placePieceAndClear(
+      grid,
+      { matrix: [[1, 1]], color: 'orange' },
+      3,
+      6,
+      2
+    );
 
-.badge {
-  display: inline-block;
-  padding: 4px 10px;
-  border-radius: var(--radius-full);
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  background-color: var(--color-surface-2);
-  color: var(--color-accent-2);
-}
+    expect(result.linesCleared).toBe(1);
+    expect(result.newCombo).toBe(3);
+    expect(result.isFullClear).toBe(true);
+    expect(result.pointsEarned).toBe(332);
+  });
 
-.badgeTruco {
-  color: var(--truco-gold);
-}
+  it('resets combo to 0 when a placement does not clear any line', () => {
+    const grid = createEmptyGrid();
+    const result = placePieceAndClear(
+      grid,
+      { matrix: [[1, 1]], color: 'blue' },
+      2,
+      2,
+      4
+    );
 
-.cardTitle {
-  font-size: 1.45rem;
-  margin-top: var(--space-2);
-}
+    expect(result.linesCleared).toBe(0);
+    expect(result.newCombo).toBe(0);
+    expect(result.pointsEarned).toBe(2);
+  });
 
-.cardDesc {
-  font-size: 0.9rem;
-  color: var(--color-text-muted);
-  line-height: 1.4;
-}
+  it('guarantees at least one playable piece in generateSmartTray when space is tight', () => {
+    const grid = createEmptyGrid();
+    // Fill entire board except a single 1x1 cell at (7,7)
+    for (let r = 0; r < GRID_SIZE; r++) {
+      for (let c = 0; c < GRID_SIZE; c++) {
+        if (r === 7 && c === 7) continue;
+        grid[r][c] = 'red';
+      }
+    }
 
-.metaRow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background-color: var(--color-surface-2);
-  padding: var(--space-3) var(--space-4);
-  border-radius: var(--radius-md);
-}
+    // Force randomFn to return 0.5 (which normally picks a big piece, not dot_1x1)
+    const tray = generateSmartTray(grid, () => 0.5);
+    expect(tray.length).toBe(3);
+    expect(tray.some((p) => p.defId === 'dot_1x1')).toBe(true);
+    expect(isGameOver(grid, tray)).toBe(false);
+  });
 
-.metaLabel {
-  font-size: 0.8rem;
-  color: var(--color-text-muted);
-}
+  it('detects Game Over when no remaining tray piece can fit', () => {
+    const grid = createEmptyGrid();
+    // Leave only a 1x1 hole at (0,0)
+    for (let r = 0; r < GRID_SIZE; r++) {
+      for (let c = 0; c < GRID_SIZE; c++) {
+        if (r === 0 && c === 0) continue;
+        grid[r][c] = 'blue';
+      }
+    }
 
-.metaValue {
-  font-family: var(--font-display);
-  font-size: 1.1rem;
-  font-weight: 700;
-  color: var(--color-warning);
-}
+    const sq3x3 = PIECE_CATALOG.find((p) => p.id === 'sq_3x3')!;
+    const unplayablePiece: PieceInstance = {
+      uid: 'test_1',
+      defId: sq3x3.id,
+      matrix: sq3x3.matrix,
+      color: 'red',
+      cellCount: 9,
+    };
 
-.actionsRow {
-  display: flex;
-  gap: var(--space-3);
-}
-
-.primaryBtn {
-  flex: 1;
-  min-height: 48px;
-  border-radius: var(--radius-md);
-  background-color: var(--color-accent);
-  color: #ffffff;
-  font-family: var(--font-display);
-  font-size: 1rem;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
-  box-shadow: var(--shadow-sm);
-  transition: transform 0.12s ease, background-color 0.15s ease;
-}
-
-.primaryBtn:active {
-  transform: scale(0.98);
-}
-
-.trucoBtn {
-  background-color: var(--truco-felt-end);
-}
-
-.secondaryBtn {
-  flex: 1;
-  min-height: 48px;
-  border-radius: var(--radius-md);
-  background-color: var(--color-surface-2);
-  border: 1px solid var(--color-border);
-  color: var(--color-text);
-  font-family: var(--font-display);
-  font-size: 0.95rem;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.statsSection {
-  background-color: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  padding: var(--space-4);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
-.statsTitle {
-  font-size: 1rem;
-  color: var(--color-text-muted);
-}
-
-.statsGrid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: var(--space-3);
-}
-
-.statItem {
-  background-color: var(--color-surface-2);
-  padding: var(--space-3);
-  border-radius: var(--radius-md);
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.statValue {
-  font-family: var(--font-display);
-  font-size: 1.25rem;
-  font-weight: 700;
-}
-
-.statLabel {
-  font-size: 0.75rem;
-  color: var(--color-text-muted);
-}
-`,
-
-  'src/features/home/HomeScreen.tsx': `import { useNavigate } from 'react-router-dom';
-import { Play, Trophy, Club, Sun, Moon } from 'lucide-react';
-import { t } from '@/i18n';
-import { useSettingsStore } from '@/features/settings/settingsStore';
-import styles from './HomeScreen.module.css';
-
-export function HomeScreen() {
-  const navigate = useNavigate();
-  const {
-    theme,
-    toggleQuickTheme,
-    highScore,
-    gamesPlayed,
-    hasSavedGame,
-    trucoWinsUs,
-    trucoWinsThem,
-  } = useSettingsStore();
-
-  return (
-    <div className={styles.container}>
-      {/* Top Header with Logo & Theme Toggle */}
-      <header className={styles.header}>
-        <div className={styles.brand}>
-          <div className={styles.logoBox} aria-hidden="true">
-            <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-              <rect x="3" y="3" width="10" height="10" rx="3" fill="#FFD93D" />
-              <rect x="15" y="3" width="10" height="10" rx="3" fill="#FF5C7A" />
-              <rect x="3" y="15" width="10" height="10" rx="3" fill="#3DDC97" />
-              <rect x="15" y="15" width="10" height="10" rx="3" fill="#FFFFFF" />
-            </svg>
-          </div>
-          <div>
-            <h1 className={styles.title}>{t.app.name}</h1>
-            <p className={styles.subtitle}>{t.app.subtitle}</p>
-          </div>
-        </div>
-
-        <button
-          type="button"
-          className={styles.themeBtn}
-          onClick={toggleQuickTheme}
-          aria-label={t.home.toggleThemeAria}
-        >
-          {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
-        </button>
-      </header>
-
-      {/* Main Feature Cards */}
-      <div className={styles.cardsGrid}>
-        {/* Card 1: Block Puzzle */}
-        <section className={\`\${styles.card} \${styles.cardGame}\`}>
-          <div className={styles.cardHeader}>
-            <div>
-              <span className={styles.badge}>{t.home.gameCard.badge}</span>
-              <h2 className={styles.cardTitle}>{t.home.gameCard.title}</h2>
-            </div>
-            <Trophy size={28} color="var(--color-warning)" aria-hidden="true" />
-          </div>
-
-          <p className={styles.cardDesc}>{t.home.gameCard.description}</p>
-
-          <div className={styles.metaRow}>
-            <span className={styles.metaLabel}>{t.home.gameCard.highScoreLabel}</span>
-            <span className={styles.metaValue}>{highScore} pts</span>
-          </div>
-
-          <div className={styles.actionsRow}>
-            <button
-              type="button"
-              className={styles.primaryBtn}
-              onClick={() => navigate('/game')}
-            >
-              <Play size={18} fill="currentColor" />
-              {t.home.gameCard.playNew}
-            </button>
-            {hasSavedGame && (
-              <button
-                type="button"
-                className={styles.secondaryBtn}
-                onClick={() => navigate('/game')}
-              >
-                {t.home.gameCard.continueGame}
-              </button>
-            )}
-          </div>
-        </section>
-
-        {/* Card 2: Truco Scorekeeper */}
-        <section className={\`\${styles.card} \${styles.cardTruco}\`}>
-          <div className={styles.cardHeader}>
-            <div>
-              <span className={\`\${styles.badge} \${styles.badgeTruco}\`}>
-                {t.home.trucoCard.badge}
-              </span>
-              <h2 className={styles.cardTitle}>{t.home.trucoCard.title}</h2>
-            </div>
-            <Club size={28} color="var(--truco-us)" aria-hidden="true" />
-          </div>
-
-          <p className={styles.cardDesc}>{t.home.trucoCard.description}</p>
-
-          <div className={styles.metaRow}>
-            <span className={styles.metaLabel}>{t.home.trucoCard.statusLabel}</span>
-            <span className={styles.metaValue} style={{ color: 'var(--truco-us)' }}>
-              {t.home.trucoCard.noActiveMatch}
-            </span>
-          </div>
-
-          <div className={styles.actionsRow}>
-            <button
-              type="button"
-              className={\`\${styles.primaryBtn} \${styles.trucoBtn}\`}
-              onClick={() => navigate('/truco')}
-            >
-              <Club size={18} />
-              {t.home.trucoCard.openTable}
-            </button>
-          </div>
-        </section>
-      </div>
-
-      {/* Compact Stats Block */}
-      <section className={styles.statsSection} aria-labelledby="stats-heading">
-        <h3 id="stats-heading" className={styles.statsTitle}>
-          {t.home.stats.title}
-        </h3>
-        <div className={styles.statsGrid}>
-          <div className={styles.statItem}>
-            <span className={styles.statValue}>{highScore}</span>
-            <span className={styles.statLabel}>{t.home.stats.bestScore}</span>
-          </div>
-          <div className={styles.statItem}>
-            <span className={styles.statValue}>{gamesPlayed}</span>
-            <span className={styles.statLabel}>{t.home.stats.gamesPlayed}</span>
-          </div>
-          <div className={styles.statItem}>
-            <span className={styles.statValue} style={{ color: 'var(--truco-us)' }}>
-              {trucoWinsUs}
-            </span>
-            <span className={styles.statLabel}>{t.home.stats.trucoWinsUs}</span>
-          </div>
-          <div className={styles.statItem}>
-            <span className={styles.statValue} style={{ color: 'var(--truco-them)' }}>
-              {trucoWinsThem}
-            </span>
-            <span className={styles.statLabel}>{t.home.stats.trucoWinsThem}</span>
-          </div>
-        </div>
-      </section>
-    </div>
-  );
-}
-`,
-
-  'src/app/App.tsx': `import { useEffect } from 'react';
-import { HashRouter, Routes, Route } from 'react-router-dom';
-import { AppShell } from '@/components/AppShell';
-import { HomeScreen } from '@/features/home/HomeScreen';
-import { useSettingsStore, applyThemeToDOM } from '@/features/settings/settingsStore';
-import { t } from '@/i18n';
-
-function PlaceholderView({ title, desc }: { title: string; desc: string }) {
-  return (
-    <section
-      style={{
-        backgroundColor: 'var(--color-surface)',
-        border: '1px solid var(--color-border)',
-        borderRadius: 'var(--radius-xl)',
-        padding: 'var(--space-6)',
-        marginTop: 'var(--space-4)',
-      }}
-    >
-      <h2 style={{ marginBottom: 'var(--space-2)' }}>{title}</h2>
-      <p style={{ color: 'var(--color-text-muted)' }}>{desc}</p>
-    </section>
-  );
-}
-
-export function App() {
-  const theme = useSettingsStore((state) => state.theme);
-
-  useEffect(() => {
-    applyThemeToDOM(theme);
-  }, [theme]);
-
-  return (
-    <HashRouter>
-      <AppShell>
-        <Routes>
-          <Route path="/" element={<HomeScreen />} />
-          <Route
-            path="/game"
-            element={
-              <PlaceholderView
-                title={t.placeholders.gameTitle}
-                desc={t.placeholders.gameDesc}
-              />
-            }
-          />
-          <Route
-            path="/truco"
-            element={
-              <PlaceholderView
-                title={t.placeholders.trucoTitle}
-                desc={t.placeholders.trucoDesc}
-              />
-            }
-          />
-          <Route
-            path="/settings"
-            element={
-              <PlaceholderView
-                title={t.placeholders.settingsTitle}
-                desc={t.placeholders.settingsDesc}
-              />
-            }
-          />
-        </Routes>
-      </AppShell>
-    </HashRouter>
-  );
-}
-`,
-
-  'src/main.tsx': `import React from 'react';
-import ReactDOM from 'react-dom/client';
-import '@fontsource/fredoka/600.css';
-import '@fontsource/fredoka/700.css';
-import '@fontsource/inter/400.css';
-import '@fontsource/inter/600.css';
-import '@/styles/tokens.css';
-import '@/styles/global.css';
-import { App } from '@/app/App';
-
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
-);
+    expect(isGameOver(grid, [unplayablePiece, null, null])).toBe(true);
+  });
+});
 `,
 
   'GUIA.md': `# Guía Paso a Paso — TrucoBlock
 
 - [x] Fase 0: Setup inicial
 - [x] Fase 1: Design system (tokens, temas), layout, navegación inferior e Inicio
-- [ ] Fase 2: Lógica del juego (funciones puras + tests)
+- [x] Fase 2: Lógica del juego (funciones puras + tests)
 - [ ] Fase 3: UI del juego: tablero, bandeja, drag & drop, vista previa
 - [ ] Fase 4: Pulido del juego: animaciones, combos, sonido, vibración, pausa, persistencia
 - [ ] Fase 5: Truco: lógica + tests + UI + palitos + historial
@@ -876,7 +731,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
 for (const [relativePath, content] of Object.entries(files)) {
   const fullPath = join(process.cwd(), relativePath);
   writeFileSync(fullPath, content, 'utf8');
-  console.log('[OK] Actualizado:', relativePath);
+  console.log('[OK] Creado/Actualizado:', relativePath);
 }
 
-console.log('\n¡Fase 1 instalada con éxito!');
+console.log('\n¡Fase 2 lista! Ejecutá: npm run test');
