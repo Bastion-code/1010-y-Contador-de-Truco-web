@@ -1,3 +1,3 @@
 # TrucoBlock
 
-PWA 2 en 1: Juego de bloques 8x8 + Anotador de Truco Argentino.
+(https://1010-y-contador-de-truco-web.vercel.app/)
