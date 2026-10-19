@@ -1,13 +1,13 @@
 import { useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
-import { RotateCcw } from 'lucide-react';
+import { Pause, Play, RotateCcw, Share2, Home } from 'lucide-react';
 import { t } from '@/i18n';
 import { useSettingsStore } from '@/features/settings/settingsStore';
 import { useGameStore } from './gameStore';
 import {
   GRID_SIZE,
   canPlacePiece,
-   canPieceFitAnywhere,
+  canPieceFitAnywhere,
   getPreviewClearLines,
 } from './engine';
 import type { PieceInstance } from './types';
@@ -26,19 +26,29 @@ interface DragState {
 }
 
 export function GameScreen() {
-  const { grid, tray, score, combo, isOver, startNewGame, placeTrayPiece } =
-    useGameStore();
+  const {
+    grid,
+    tray,
+    score,
+    combo,
+    isOver,
+    isPaused,
+    startNewGame,
+    pauseGame,
+    placeTrayPiece,
+  } = useGameStore();
   const highScore = useSettingsStore((state) => state.highScore);
 
   const boardRef = useRef<HTMLDivElement | null>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
+  const [copiedShare, setCopiedShare] = useState(false);
 
   const computeBoardSnap = (
     clientX: number,
     clientY: number,
     liftY: number,
     piece: PieceInstance
-  ): { row: number | null; col: number | null; cellSize: number } => {
+  ) => {
     const boardEl = boardRef.current;
     if (!boardEl) return { row: null, col: null, cellSize: 38 };
 
@@ -50,11 +60,9 @@ export function GameScreen() {
     const pieceWidth = cols * cellSize;
     const pieceHeight = rows * cellSize;
 
-    // Top-left corner of the floating piece
     const pieceLeft = clientX - pieceWidth / 2;
     const pieceTop = clientY - liftY - pieceHeight / 2;
 
-    // Center of cell (0,0) of the piece
     const firstCellCenterX = pieceLeft + cellSize / 2;
     const firstCellCenterY = pieceTop + cellSize / 2;
 
@@ -72,7 +80,7 @@ export function GameScreen() {
     trayIndex: number,
     piece: PieceInstance
   ) => {
-    if (isOver) return;
+    if (isOver || isPaused) return;
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
 
@@ -133,7 +141,21 @@ export function GameScreen() {
     setDrag(null);
   };
 
-  // Compute ghost cells & line clear preview when snapped
+  const handleShare = async () => {
+    const text = `¡Hice ${score} puntos en TrucoBlock (Bloques 8x8)! 🧩`;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: 'TrucoBlock', text });
+        return;
+      } catch {
+        // Fallback to clipboard
+      }
+    }
+    await navigator.clipboard.writeText(text);
+    setCopiedShare(true);
+    setTimeout(() => setCopiedShare(false), 2500);
+  };
+
   const ghostCells = new Set<string>();
   let previewLines: { rows: number[]; cols: number[] } = { rows: [], cols: [] };
 
@@ -146,16 +168,12 @@ export function GameScreen() {
         }
       }
     }
-    previewLines = getPreviewClearLines(
-      grid,
-      matrix,
-      drag.snapRow,
-      drag.snapCol
-    );
+    previewLines = getPreviewClearLines(grid, matrix, drag.snapRow, drag.snapCol);
   }
 
   const clearRowsSet = new Set(previewLines.rows);
   const clearColsSet = new Set(previewLines.cols);
+  const isNewRecord = score > 0 && score >= highScore;
 
   return (
     <div className={styles.screen}>
@@ -174,16 +192,14 @@ export function GameScreen() {
         </div>
 
         <div className={styles.hudActions}>
-          {combo > 0 && (
-            <span className={styles.comboBadge}>x{combo}</span>
-          )}
+          {combo > 0 && <span className={styles.comboBadge}>x{combo}</span>}
           <button
             type="button"
             className={styles.iconBtn}
-            onClick={startNewGame}
-            aria-label={t.game.restartAria}
+            onClick={() => pauseGame(true)}
+            aria-label={t.game.pauseAria}
           >
-            <RotateCcw size={20} />
+            <Pause size={20} />
           </button>
         </div>
       </header>
@@ -222,15 +238,59 @@ export function GameScreen() {
           )}
         </div>
 
-        {isOver && (
-          <div className={styles.overBanner}>
-            <span className={styles.overBadge}>{t.game.gameOverBadge}</span>
+        {/* Pause Modal Overlay */}
+        {isPaused && (
+          <div className={styles.overlay}>
+            <h2 className={styles.modalTitle}>{t.game.pauseTitle}</h2>
             <button
               type="button"
-              className={styles.newGameBtn}
+              className={styles.primaryBtn}
+              onClick={() => pauseGame(false)}
+            >
+              <Play size={18} fill="currentColor" />
+              {t.game.resume}
+            </button>
+            <button
+              type="button"
+              className={styles.secondaryBtn}
+              onClick={() => {
+                pauseGame(false);
+                startNewGame();
+              }}
+            >
+              <RotateCcw size={18} style={{ marginRight: 8 }} />
+              {t.game.restart}
+            </button>
+          </div>
+        )}
+
+        {/* Game Over Modal Overlay */}
+        {isOver && (
+          <div className={styles.overlay}>
+            <h2 className={styles.modalTitle}>{t.game.gameOverTitle}</h2>
+            {isNewRecord && (
+              <span className={styles.recordBadge}>{t.game.newRecordBadge}</span>
+            )}
+            <p className={styles.modalSub}>
+              {t.game.finalScore}: <strong>{score}</strong>
+            </p>
+
+            <button
+              type="button"
+              className={styles.primaryBtn}
               onClick={startNewGame}
             >
-              {t.game.newGameBtn}
+              <RotateCcw size={18} />
+              {t.game.playAgain}
+            </button>
+
+            <button
+              type="button"
+              className={styles.secondaryBtn}
+              onClick={handleShare}
+            >
+              <Share2 size={18} style={{ marginRight: 8 }} />
+              {copiedShare ? t.game.shareCopied : t.game.shareScore}
             </button>
           </div>
         )}
