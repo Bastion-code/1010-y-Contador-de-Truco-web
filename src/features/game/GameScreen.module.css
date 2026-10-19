@@ -1,0 +1,252 @@
+.screen {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+
+.hud {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+.scoreCard {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-2) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--shadow-sm);
+}
+
+.scoreLabel {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+}
+
+.scoreValue {
+  font-family: var(--font-display);
+  font-size: 1.45rem;
+  font-weight: 700;
+  color: var(--color-text);
+  line-height: 1.15;
+}
+
+.bestValue {
+  color: var(--color-warning);
+}
+
+.hudActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.comboBadge {
+  padding: 6px 10px;
+  border-radius: var(--radius-full);
+  background: linear-gradient(135deg, var(--color-accent), var(--color-accent-2));
+  color: #ffffff;
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  font-weight: 700;
+  box-shadow: var(--shadow-sm);
+}
+
+.iconBtn {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-md);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text);
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.12s ease;
+}
+
+.iconBtn:active {
+  transform: scale(0.94);
+}
+
+/* 8x8 Board */
+.boardWrapper {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  background-color: var(--color-surface);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  padding: var(--space-2);
+  box-shadow: var(--shadow-md);
+  touch-action: none;
+}
+
+.boardGrid {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  grid-template-rows: repeat(8, 1fr);
+  gap: 4px;
+}
+
+.cell {
+  border-radius: 7px;
+  background-color: var(--color-surface-2);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  position: relative;
+  transition: transform 0.1s ease, background-color 0.1s ease;
+}
+
+/* Filled Block Colors with top shine */
+.blockFilled {
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  box-shadow: inset 0 3px 0 rgba(255, 255, 255, 0.35), inset 0 -2px 0 rgba(0, 0, 0, 0.2);
+}
+
+.color_red {
+  background: linear-gradient(180deg, #ff758f 0%, var(--block-red) 100%);
+}
+.color_orange {
+  background: linear-gradient(180deg, #ffb266 0%, var(--block-orange) 100%);
+}
+.color_yellow {
+  background: linear-gradient(180deg, #ffe366 0%, var(--block-yellow) 100%);
+}
+.color_green {
+  background: linear-gradient(180deg, #5ce6ad 0%, var(--block-green) 100%);
+}
+.color_cyan {
+  background: linear-gradient(180deg, #72d6f5 0%, var(--block-cyan) 100%);
+}
+.color_blue {
+  background: linear-gradient(180deg, #7096ff 0%, var(--block-blue) 100%);
+}
+.color_purple {
+  background: linear-gradient(180deg, #c6a6ff 0%, var(--block-purple) 100%);
+}
+
+/* Ghost preview cell */
+.cellGhost {
+  opacity: 0.48;
+  transform: scale(0.95);
+}
+
+/* Line about to clear highlight */
+.cellWillClear {
+  box-shadow: 0 0 0 2px var(--color-warning), inset 0 0 10px rgba(255, 217, 61, 0.75) !important;
+  filter: brightness(1.22);
+}
+
+/* Game Over inline banner (full modal in Phase 4) */
+.overBanner {
+  position: absolute;
+  inset: 0;
+  background-color: rgba(15, 18, 38, 0.86);
+  backdrop-filter: blur(4px);
+  border-radius: var(--radius-xl);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  z-index: 10;
+}
+
+.overBadge {
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--color-error);
+}
+
+.newGameBtn {
+  min-height: 46px;
+  padding: 0 var(--space-5);
+  border-radius: var(--radius-md);
+  background-color: var(--color-accent);
+  color: #ffffff;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 600;
+  box-shadow: var(--shadow-sm);
+}
+
+/* Piece Tray (3 slots) */
+.tray {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-3);
+  min-height: 116px;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  padding: var(--space-3);
+  box-shadow: var(--shadow-sm);
+  touch-action: none;
+}
+
+.traySlot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  background-color: var(--color-surface-2);
+  min-height: 92px;
+  position: relative;
+  touch-action: none;
+}
+
+.traySlotInteractive {
+  cursor: grab;
+}
+
+.traySlotDragging {
+  opacity: 0.2;
+}
+
+.traySlotDisabled {
+  opacity: 0.35;
+}
+
+.miniPieceGrid {
+  display: grid;
+  gap: 3px;
+  pointer-events: none;
+}
+
+.miniCell {
+  width: 15px;
+  height: 15px;
+  border-radius: 4px;
+}
+
+.miniCellEmpty {
+  background-color: transparent;
+}
+
+/* Floating Drag Layer */
+.floatingPiece {
+  position: fixed;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  z-index: 100;
+  will-change: transform;
+}
+
+.floatingGrid {
+  display: grid;
+  gap: 4px;
+}

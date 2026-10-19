@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { HashRouter, Routes, Route } from 'react-router-dom';
 import { AppShell } from '@/components/AppShell';
 import { HomeScreen } from '@/features/home/HomeScreen';
+import { GameScreen } from '@/features/game/GameScreen';
 import { useSettingsStore, applyThemeToDOM } from '@/features/settings/settingsStore';
 import { t } from '@/i18n';
 
@@ -34,15 +35,7 @@ export function App() {
       <AppShell>
         <Routes>
           <Route path="/" element={<HomeScreen />} />
-          <Route
-            path="/game"
-            element={
-              <PlaceholderView
-                title={t.placeholders.gameTitle}
-                desc={t.placeholders.gameDesc}
-              />
-            }
-          />
+          <Route path="/game" element={<GameScreen />} />
           <Route
             path="/truco"
             element={
